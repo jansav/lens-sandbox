@@ -25,9 +25,10 @@ isn't configured for is not rewritten — the placeholder goes nowhere useful.
 
 Every credential provider is a [connector](connectors.md): a named service that
 bundles its placeholder, environment variable, and per-domain injection with the
-routes it needs. `openai`, `anthropic`, `bedrock`, `linear`, `telegram`, `gitlab`,
-and `huggingface` ship in the bundled catalog; `github` ships as an `oauth` connector
-(device sign-in) and `openrouter` as an `oauth` connector (pkce browser sign-in).
+routes it needs. `openai`, `anthropic`, `claude-code-subscription`, `bedrock`,
+`linear`, `telegram`, `gitlab`, and `huggingface` ship in the bundled catalog as
+`credential` connectors; `github` and `google` ship as `oauth` connectors (device
+sign-in) and `openrouter` as an `oauth` connector (pkce browser sign-in).
 Declare your own for an internal API with `lns connector add`
 (see [Connectors](connectors.md)). A sandbox definition that lists a provider
 under `spec.connectors` seeds its placeholder env var but only *offers* it —
@@ -96,8 +97,8 @@ lns connector grants --all        # every project on this machine
 lns connector revoke <id>         # forget this project's grants for one connector
 ```
 
-`lns connector disconnect <id>` forgets them too, as part of removing the
-connector from the directory's policy. A revoke applies to the next run — a
+`lns connector disconnect <id>` forgets them too, as part of forgetting this
+project's connection. A revoke applies to the next run — a
 sandbox already running keeps the arming it was granted at launch — but it does
 win over a card that run is still holding: answering that card afterwards arms
 the run in front of you and records nothing, so the forget stays forgotten and
@@ -131,7 +132,7 @@ A connector's injection `kind` decides how the real value reaches the destinatio
 | `basic_x_access_token` | HTTP Basic auth as `x-access-token:<value>`                           |
 | `api_key_header`       | A named header (the injection's `header:`, e.g. `x-api-key: <value>`) |
 
-`lns connector add --inject` accepts all five non-AWS kinds. `api_key_header`
+`lns connector add --inject` accepts all five kinds. `api_key_header`
 requires the header name as a third segment
 (`--inject api_key_header:DOMAIN:HEADER`); the other four are headerless and use
 the two-segment form (`--inject KIND:DOMAIN`). `awsSigv4` is unsupported as a

@@ -35,6 +35,18 @@ Feature: users discover the CLI surface
     And the output contains "--mem"
     And the output contains "--policy"
 
+  Scenario: lns connector connect --help names where the connection is recorded
+    When I run "lns connector connect --help"
+    Then the exit code is 0
+    And the output contains "per-machine grant record"
+    And the output does not contain "this directory's policy"
+
+  Scenario: lns connector disconnect --help names what it forgets
+    When I run "lns connector disconnect --help"
+    Then the exit code is 0
+    And the output contains "per-machine grant record"
+    And the output does not contain "this directory's policy"
+
   Scenario: lns audit --help describes the unified timeline
     When I run "lns audit --help"
     Then the exit code is 0

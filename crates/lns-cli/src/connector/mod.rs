@@ -32,11 +32,11 @@ pub enum ConnectorCommand {
     #[command(about = "Remove a user-declared connector; bundled ones cannot be removed.")]
     Remove(ConnectorRemoveArgs),
     #[command(
-        about = "Bind a connector's per-machine value decision (oauth connectors sign in); records the id in this directory's policy."
+        about = "Bind a connector's per-machine value decision (oauth connectors sign in); records the connection for this project in your per-machine grant record."
     )]
     Connect(ConnectArgs),
     #[command(
-        about = "Disconnect a connector from this directory's policy and forget its per-workload grants here."
+        about = "Forget this project's connection in your per-machine grant record and its per-workload grants here."
     )]
     Disconnect(DisconnectArgs),
     #[command(about = "List the per-workload connector grants remembered for this project.")]
@@ -747,6 +747,38 @@ mod tests {
         Catalog { connectors }.save_atomic(path).unwrap();
     }
 
+    fn cred_connector(id: &str) -> Connector {
+        Connector {
+            id: id.into(),
+            name: None,
+            auth_kind: AuthKind::Credential,
+            routes: vec![ConnectorRoute {
+                match_pattern: "api.some-provider.example".into(),
+                transport: None,
+                scheme: None,
+                tls_terminate: false,
+                rules: Vec::new(),
+            }],
+            credential: Some(CredentialAuth {
+                env_var: "SOME_TOKEN".into(),
+                placeholder: "some_LNSPLACEHOLDER0000000000".into(),
+                injections: vec![InjectionDef {
+                    kind: InjectionKind::BearerHeader,
+                    domain: "api.some-provider.example".into(),
+                    header: None,
+                }],
+            }),
+            oauth: None,
+            token_fallback: None,
+        }
+    }
+
+    fn catalog_with_some_provider(dir: &Path) -> std::path::PathBuf {
+        let path = catalog_at(dir);
+        write_user_catalog(&path, vec![cred_connector("some-provider")]);
+        path
+    }
+
     fn oauth_connector(id: &str) -> Connector {
         Connector {
             id: id.into(),
@@ -1032,13 +1064,13 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn connect_writes_a_bundled_connector_id_into_the_policy() {
+    async fn connect_records_the_project_for_a_known_connector() {
         let dir = TempDir::new().unwrap();
-        let catalog = catalog_at(dir.path());
+        let catalog = catalog_with_some_provider(dir.path());
         let mut out = Vec::new();
         connect(
             &ConnectArgs {
-                id: "gitlab".into(),
+                id: "some-provider".into(),
                 policy: None,
             },
             dir.path(),
@@ -1051,7 +1083,7 @@ mod tests {
         .unwrap();
         assert_eq!(
             connected_at(dir.path()),
-            ["gitlab"],
+            ["some-provider"],
             "connecting names a directory and no workload, so it records per project beside the per-workload grants"
         );
     }
@@ -1131,11 +1163,11 @@ mod tests {
         let mut out = Vec::new();
         connect(
             &ConnectArgs {
-                id: "gitlab".into(),
+                id: "some-provider".into(),
                 policy: None,
             },
             dir.path(),
-            &catalog_at(dir.path()),
+            &catalog_with_some_provider(dir.path()),
             &dir.path().join("grants.json"),
             &FakeSignIn::binding(BindOutcome::Completed(
                 lns_ipc::CredentialBindDecision::HostDetect,
@@ -1161,11 +1193,11 @@ mod tests {
         let mut out = Vec::new();
         connect(
             &ConnectArgs {
-                id: "gitlab".into(),
+                id: "some-provider".into(),
                 policy: None,
             },
             dir.path(),
-            &catalog_at(dir.path()),
+            &catalog_with_some_provider(dir.path()),
             &dir.path().join("grants.json"),
             &FakeSignIn::binding(BindOutcome::Completed(
                 lns_ipc::CredentialBindDecision::Denied,
@@ -1183,11 +1215,11 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let err = connect(
             &ConnectArgs {
-                id: "gitlab".into(),
+                id: "some-provider".into(),
                 policy: None,
             },
             dir.path(),
-            &catalog_at(dir.path()),
+            &catalog_with_some_provider(dir.path()),
             &dir.path().join("grants.json"),
             &FakeSignIn::binding(BindOutcome::Failed("the value decision timed out".into())),
             &mut Vec::new(),
@@ -1206,11 +1238,11 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let err = connect(
             &ConnectArgs {
-                id: "gitlab".into(),
+                id: "some-provider".into(),
                 policy: None,
             },
             dir.path(),
-            &catalog_at(dir.path()),
+            &catalog_with_some_provider(dir.path()),
             &dir.path().join("grants.json"),
             &FakeSignIn::binding(BindOutcome::ServiceUnavailable),
             &mut Vec::new(),
@@ -1250,10 +1282,10 @@ mod tests {
     #[tokio::test]
     async fn disconnect_removes_a_connected_connector() {
         let dir = TempDir::new().unwrap();
-        let catalog = catalog_at(dir.path());
+        let catalog = catalog_with_some_provider(dir.path());
         connect(
             &ConnectArgs {
-                id: "gitlab".into(),
+                id: "some-provider".into(),
                 policy: None,
             },
             dir.path(),
@@ -1266,7 +1298,7 @@ mod tests {
         .unwrap();
         disconnect(
             &DisconnectArgs {
-                id: "gitlab".into(),
+                id: "some-provider".into(),
                 policy: None,
             },
             dir.path(),
@@ -1282,7 +1314,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let err = disconnect(
             &DisconnectArgs {
-                id: "gitlab".into(),
+                id: "some-provider".into(),
                 policy: None,
             },
             dir.path(),
@@ -1300,14 +1332,14 @@ mod tests {
         run(
             &ConnectorCommand::List(list_args()),
             dir.path(),
-            &catalog_at(dir.path()),
+            &catalog_with_some_provider(dir.path()),
             &dir.path().join("grants.json"),
             &FakeSignIn::completed(),
             &mut out,
         )
         .await
         .unwrap();
-        assert!(String::from_utf8(out).unwrap().contains("gitlab"));
+        assert!(String::from_utf8(out).unwrap().contains("some-provider"));
     }
 
     #[tokio::test]
@@ -1341,10 +1373,10 @@ mod tests {
     #[tokio::test]
     async fn run_dispatches_connect_and_disconnect() {
         let dir = TempDir::new().unwrap();
-        let path = catalog_at(dir.path());
+        let path = catalog_with_some_provider(dir.path());
         run(
             &ConnectorCommand::Connect(ConnectArgs {
-                id: "gitlab".into(),
+                id: "some-provider".into(),
                 policy: None,
             }),
             dir.path(),
@@ -1355,10 +1387,10 @@ mod tests {
         )
         .await
         .unwrap();
-        assert_eq!(connected_at(dir.path()), ["gitlab"]);
+        assert_eq!(connected_at(dir.path()), ["some-provider"]);
         run(
             &ConnectorCommand::Disconnect(DisconnectArgs {
-                id: "gitlab".into(),
+                id: "some-provider".into(),
                 policy: None,
             }),
             dir.path(),
