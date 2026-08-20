@@ -291,8 +291,10 @@ does not: it returns your terminal, exits `0`, and leaves the workload running.
 
 Every project directory has one mixin nobody publishes: `lns-local-mixin.yaml`,
 beside the document. It holds what you decided here — the destinations you
-approved or refused, and which connectors this project uses — and every run in
-that directory resolves it last, so nothing you pulled can overrule it.
+approved or refused — and every run in that directory resolves it last, so
+nothing you pulled can overrule it. Which connectors this project uses is not
+in it: that is per machine, and it lives in the grant record
+([Where a connector grant goes](sandbox-spec.md#84-where-a-connector-grant-goes)).
 
 - **The run writes it.** A destination no rule decides is asked about at first
   use, and your answer is appended as an `egress` entry. There is no command to
@@ -648,7 +650,7 @@ The project keeps two files, both in the directory you work in:
 | Path | Holds |
 |---|---|
 | `./lns.yaml` | The sandbox document. |
-| `./lns-local-mixin.yaml` | What you decided here: the egress rules you approved, and which connectors this project uses. Committable. |
+| `./lns-local-mixin.yaml` | What you decided here: the egress rules you approved. Committable. |
 
 Secrets are never written to the project. A credential value is bound per machine,
 and what a project records is the decision, not the value.
