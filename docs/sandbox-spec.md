@@ -863,13 +863,16 @@ value:
 #### 3.2.2 Seeding, arming, and domain ownership
 
 - **A method seeds its placeholder when it is the method this machine holds.**
-  A connector with one method always holds it, so it always seeds. A connector
-  with several seeds nothing until the user picks one — including the case where
-  the choice is between a real sign-in and pasting a token.
-- **Seeding is not connection.** Routes and arming stay gated by the connect
-  card, so an unconnected connector's seeded placeholder is still held at the
-  gate. Env seeding exists so a tool can detect "I am signed in"; injection
-  itself is domain-keyed, not placeholder-keyed.
+  A connector holds a method once the developer connects through it. A connector
+  with several methods holds none until the user picks one — including the case
+  where the choice is between a real sign-in and pasting a token.
+- **An installed connector seeds nothing.** Installing is not connecting
+  ([§7.1](#71-connectors)), so a connector nobody has connected holds no method
+  and seeds no variable, even when it declares exactly one. Env seeding exists so
+  a tool can detect "I am signed in", which is not true before a connection.
+- **Seeding is not arming.** Routes stay gated by the connect card, so the
+  placeholder a held method seeds is still held at the gate. Injection itself is
+  domain-keyed, not placeholder-keyed.
 - **One connector per domain.** Two connectors claiming the same destination is
   refused at install time, because the match in [§3.1.7](#317-credentials) would
   be ambiguous. See [§7.1](#71-connectors).
