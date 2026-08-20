@@ -1757,8 +1757,8 @@ egress:
     #[test]
     fn connect_adds_an_connector_id() {
         let mut p = Policy::default();
-        p.connect("github");
-        assert_eq!(p.connectors, ["github"]);
+        p.connect("some-provider");
+        assert_eq!(p.connectors, ["some-provider"]);
     }
 
     #[test]

@@ -45,9 +45,10 @@ Feature: connecting connectors from the CLI
     And "some-oauth" is not recorded as connected
 
   Scenario: The catalog listing shows each connector's auth kind
+    Given a user catalog declares the "some-provider" credential connector
     When the developer runs "lns connector list"
     Then "some-oauth" is listed as authenticating by oauth
-    And "gitlab" is listed as authenticating by credential
+    And "some-provider" is listed as authenticating by credential
 
   Scenario: Connecting a pkce connector opens the browser and then records it
     Given a user catalog declares the "some-pkce" pkce connector

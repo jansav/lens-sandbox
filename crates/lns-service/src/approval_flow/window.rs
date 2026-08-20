@@ -992,7 +992,7 @@ mod tests {
         let (tx, _rx) = unbounded_channel();
         s.insert_credential_pending(cred_prompt("c1", "some-provider"), true, tx.clone());
         s.insert_credential_pending(cred_prompt("c1", "some-provider"), true, tx.clone());
-        s.insert_credential_pending(cred_prompt("c2", "openai"), false, tx);
+        s.insert_credential_pending(cred_prompt("c2", "some-provider"), false, tx);
         assert_eq!(s.snapshot().pending_credentials.len(), 2);
     }
 
@@ -1020,7 +1020,7 @@ mod tests {
         let s = WindowState::new();
         let (tx, _rx) = unbounded_channel();
         s.insert_credential_pending(cred_prompt("c1", "some-provider"), true, tx.clone());
-        s.insert_credential_pending(cred_prompt("c2", "openai"), false, tx);
+        s.insert_credential_pending(cred_prompt("c2", "some-provider"), false, tx);
         let snap = s.snapshot();
         assert!(snap.pending_credentials[0].host_value_available);
         assert!(!snap.pending_credentials[1].host_value_available);
@@ -1051,7 +1051,7 @@ mod tests {
         let s = WindowState::new();
         let (tx, _rx) = unbounded_channel();
         s.insert_credential_pending(cred_prompt("c1", "some-provider"), true, tx.clone());
-        s.insert_credential_pending(cred_prompt("c2", "openai"), false, tx);
+        s.insert_credential_pending(cred_prompt("c2", "some-provider"), false, tx);
         s.remove_credential_pending("c1");
         let snap = s.snapshot();
         assert_eq!(snap.pending_credentials.len(), 1);
@@ -1082,7 +1082,7 @@ mod tests {
         let s = WindowState::new();
         let (tx, _rx) = unbounded_channel();
         s.insert_credential_pending(cred_prompt("c1", "some-provider"), true, tx.clone());
-        s.insert_credential_pending(cred_prompt("c2", "openai"), false, tx);
+        s.insert_credential_pending(cred_prompt("c2", "some-provider"), false, tx);
         let snap = s.snapshot();
         assert_eq!(snap.pending_credentials.len(), 2);
         assert_eq!(snap.pending_credentials[0].id, "c1");
@@ -1113,7 +1113,7 @@ mod tests {
         let (tx1, mut rx1) = unbounded_channel();
         let (tx2, mut rx2) = unbounded_channel();
         s.insert_credential_pending(cred_prompt("c1", "some-provider"), true, tx1);
-        s.insert_credential_pending(cred_prompt("c2", "openai"), false, tx2);
+        s.insert_credential_pending(cred_prompt("c2", "some-provider"), false, tx2);
         assert!(s.decide_credential("c1", CredentialDecisionRequest::Deny));
         assert_eq!(
             rx1.try_recv().expect("rx1").request,

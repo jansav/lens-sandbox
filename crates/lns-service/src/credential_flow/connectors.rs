@@ -434,13 +434,17 @@ mod tests {
 
     #[test]
     fn resolves_an_applied_credential_connector_into_a_provider_and_its_routes() {
-        let catalog = vec![cred_connector("gitlab", "GITLAB_TOKEN", "gitlab.com")];
-        let out = resolve_applied_connectors(&policy_applying(&["gitlab"]), &catalog);
+        let catalog = vec![cred_connector(
+            "some-provider",
+            "SOME_TOKEN",
+            "api.some-provider.example",
+        )];
+        let out = resolve_applied_connectors(&policy_applying(&["some-provider"]), &catalog);
         assert_eq!(out.providers.len(), 1);
-        assert_eq!(out.providers[0].id(), "gitlab");
-        assert_eq!(out.providers[0].env_var(), "GITLAB_TOKEN");
+        assert_eq!(out.providers[0].id(), "some-provider");
+        assert_eq!(out.providers[0].env_var(), "SOME_TOKEN");
         assert_eq!(out.routes.len(), 1);
-        assert_eq!(out.routes[0].match_pattern, "gitlab.com");
+        assert_eq!(out.routes[0].match_pattern, "api.some-provider.example");
         assert_eq!(out.routes[0].verdict, lns_policy::Verdict::Allow);
     }
 
@@ -734,7 +738,11 @@ mod tests {
 
     #[test]
     fn skips_a_catalog_connector_that_is_not_applied() {
-        let catalog = vec![cred_connector("gitlab", "GITLAB_TOKEN", "gitlab.com")];
+        let catalog = vec![cred_connector(
+            "some-provider",
+            "SOME_TOKEN",
+            "api.some-provider.example",
+        )];
         let out = resolve_applied_connectors(&policy_applying(&[]), &catalog);
         assert!(out.providers.is_empty());
         assert!(out.routes.is_empty());
@@ -742,16 +750,24 @@ mod tests {
 
     #[test]
     fn applied_connector_routes_maps_connected_ids_to_their_catalog_routes() {
-        let catalog = vec![cred_connector("gitlab", "GITLAB_TOKEN", "gitlab.com")];
-        let routes = applied_connector_routes(&["gitlab".to_string()], &catalog);
+        let catalog = vec![cred_connector(
+            "some-provider",
+            "SOME_TOKEN",
+            "api.some-provider.example",
+        )];
+        let routes = applied_connector_routes(&["some-provider".to_string()], &catalog);
         assert_eq!(routes.len(), 1);
-        assert_eq!(routes[0].match_pattern, "gitlab.com");
+        assert_eq!(routes[0].match_pattern, "api.some-provider.example");
         assert_eq!(routes[0].verdict, lns_policy::Verdict::Allow);
     }
 
     #[test]
     fn applied_connector_routes_ignores_ids_absent_from_the_catalog() {
-        let catalog = vec![cred_connector("gitlab", "GITLAB_TOKEN", "gitlab.com")];
+        let catalog = vec![cred_connector(
+            "some-provider",
+            "SOME_TOKEN",
+            "api.some-provider.example",
+        )];
         assert!(applied_connector_routes(&["nope".to_string()], &catalog).is_empty());
     }
 
@@ -853,21 +869,29 @@ mod tests {
     #[test]
     fn resolves_only_the_applied_subset_of_a_multi_entry_catalog() {
         let catalog = vec![
-            cred_connector("gitlab", "GITLAB_TOKEN", "gitlab.com"),
-            cred_connector("huggingface", "HF_TOKEN", "huggingface.co"),
+            cred_connector("some-provider", "SOME_TOKEN", "api.some-provider.example"),
+            cred_connector(
+                "other-provider",
+                "OTHER_TOKEN",
+                "api.other-provider.example",
+            ),
         ];
-        let out = resolve_applied_connectors(&policy_applying(&["huggingface"]), &catalog);
+        let out = resolve_applied_connectors(&policy_applying(&["other-provider"]), &catalog);
         let ids: Vec<&str> = out.providers.iter().map(|p| p.id()).collect();
-        assert_eq!(ids, ["huggingface"]);
+        assert_eq!(ids, ["other-provider"]);
     }
 
     #[test]
     fn connectable_includes_an_unconnected_catalog_credential_connector() {
-        let catalog = vec![cred_connector("gitlab", "GITLAB_TOKEN", "gitlab.com")];
+        let catalog = vec![cred_connector(
+            "some-provider",
+            "SOME_TOKEN",
+            "api.some-provider.example",
+        )];
         let c = resolve_connectable_connectors(&policy_applying(&[]), &catalog);
         assert_eq!(c.providers.len(), 1);
-        assert_eq!(c.providers[0].id(), "gitlab");
-        assert_eq!(c.routes.get("gitlab").map(|r| r.len()), Some(1));
+        assert_eq!(c.providers[0].id(), "some-provider");
+        assert_eq!(c.routes.get("some-provider").map(|r| r.len()), Some(1));
     }
 
     #[test]
@@ -947,8 +971,12 @@ mod tests {
 
     #[test]
     fn connectable_excludes_an_already_applied_connector() {
-        let catalog = vec![cred_connector("gitlab", "GITLAB_TOKEN", "gitlab.com")];
-        let c = resolve_connectable_connectors(&policy_applying(&["gitlab"]), &catalog);
+        let catalog = vec![cred_connector(
+            "some-provider",
+            "SOME_TOKEN",
+            "api.some-provider.example",
+        )];
+        let c = resolve_connectable_connectors(&policy_applying(&["some-provider"]), &catalog);
         assert!(
             c.providers.is_empty(),
             "an applied connector is not connectable"

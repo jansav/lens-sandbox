@@ -35,7 +35,7 @@ impl ConnectorSignIn for FakeSignIn {
             if pkce {
                 writeln!(
                     out,
-                    "Opening your browser to authorize {id}… (if it didn't open, visit https://openrouter.ai/auth?code_challenge=abc)"
+                    "Opening your browser to authorize {id}… (if it didn't open, visit https://api.some-oauth.example/auth?code_challenge=abc)"
                 )?;
             } else {
                 writeln!(
@@ -101,15 +101,22 @@ async fn run_connector(world: &mut BehaviourWorld, tail: &[&str]) {
     world.result = Some(run);
 }
 
+fn append_connector(dir: &std::path::Path, connector: lns_policy::connectors::Connector) {
+    use lns_policy::connectors::Catalog;
+    let path = dir.join(".lns-connectors.yaml");
+    let mut catalog = Catalog::load_or_default(&path).unwrap();
+    catalog.connectors.push(connector);
+    catalog.save_atomic(&path).unwrap();
+}
+
 #[given(regex = r#"^a user catalog declares the "([^"]+)" oauth connector$"#)]
 fn given_user_oauth_connector(world: &mut BehaviourWorld, id: String) {
-    use lns_policy::connectors::{
-        AuthKind, Catalog, Connector, ConnectorRoute, OauthAuth, OauthFlow,
-    };
+    use lns_policy::connectors::{AuthKind, Connector, ConnectorRoute, OauthAuth, OauthFlow};
     use lns_policy::providers::{InjectionDef, InjectionKind};
     let dir = cwd(world);
-    Catalog {
-        connectors: vec![Connector {
+    append_connector(
+        &dir,
+        Connector {
             id,
             name: None,
             auth_kind: AuthKind::Oauth,
@@ -140,22 +147,19 @@ fn given_user_oauth_connector(world: &mut BehaviourWorld, id: String) {
                 }],
             }),
             token_fallback: None,
-        }],
-    }
-    .save_atomic(&dir.join(".lns-connectors.yaml"))
-    .unwrap();
+        },
+    );
 }
 
 #[given(regex = r#"^a user catalog declares the "([^"]+)" pkce connector$"#)]
 fn given_user_pkce_connector(world: &mut BehaviourWorld, id: String) {
-    use lns_policy::connectors::{
-        AuthKind, Catalog, Connector, ConnectorRoute, OauthAuth, OauthFlow,
-    };
+    use lns_policy::connectors::{AuthKind, Connector, ConnectorRoute, OauthAuth, OauthFlow};
     use lns_policy::providers::{InjectionDef, InjectionKind};
     world.signin_is_pkce = true;
     let dir = cwd(world);
-    Catalog {
-        connectors: vec![Connector {
+    append_connector(
+        &dir,
+        Connector {
             id,
             name: None,
             auth_kind: AuthKind::Oauth,
@@ -186,18 +190,17 @@ fn given_user_pkce_connector(world: &mut BehaviourWorld, id: String) {
                 }],
             }),
             token_fallback: None,
-        }],
-    }
-    .save_atomic(&dir.join(".lns-connectors.yaml"))
-    .unwrap();
+        },
+    );
 }
 
 fn write_credential_catalog(world: &mut BehaviourWorld, id: String) {
-    use lns_policy::connectors::{AuthKind, Catalog, Connector, ConnectorRoute, CredentialAuth};
+    use lns_policy::connectors::{AuthKind, Connector, ConnectorRoute, CredentialAuth};
     use lns_policy::providers::{InjectionDef, InjectionKind};
     let dir = cwd(world);
-    Catalog {
-        connectors: vec![Connector {
+    append_connector(
+        &dir,
+        Connector {
             id: id.clone(),
             name: None,
             auth_kind: AuthKind::Credential,
@@ -219,10 +222,8 @@ fn write_credential_catalog(world: &mut BehaviourWorld, id: String) {
             }),
             oauth: None,
             token_fallback: None,
-        }],
-    }
-    .save_atomic(&dir.join(".lns-connectors.yaml"))
-    .unwrap();
+        },
+    );
 }
 
 #[given(regex = r#"^a user catalog declares the "([^"]+)" credential connector$"#)]

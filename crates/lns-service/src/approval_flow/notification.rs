@@ -107,7 +107,7 @@ pub(crate) mod tests {
     #[test]
     fn present_inserts_into_state() {
         let (n, state, _rx) = fixture(false);
-        n.present(&prompt("r1", "api.linear.app"));
+        n.present(&prompt("r1", "api.example.test"));
         assert_eq!(state.pending_count(), 1);
     }
 

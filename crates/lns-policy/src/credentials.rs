@@ -105,12 +105,12 @@ mod tests {
         let mut m = CredentialStateFile::new();
         m.insert("some-provider".into(), CredentialEntry::HostDetect);
         m.insert(
-            "openai".into(),
+            "other-provider".into(),
             CredentialEntry::Stored {
-                value: "sk-real-token".into(),
+                value: "some-secret".into(),
             },
         );
-        m.insert("linear".into(), CredentialEntry::Deny);
+        m.insert("third-provider".into(), CredentialEntry::Deny);
         m
     }
 
