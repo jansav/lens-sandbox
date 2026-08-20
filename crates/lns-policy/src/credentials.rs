@@ -1,4 +1,4 @@
-//! Credential rules live in `~/.lns-credentials.json`, not `lns-local-mixin.yaml`, to keep the shareable policy file free of per-machine state.
+//! Credential rules live in `~/.lns/credentials.json`, not `lns-local-mixin.yaml`, to keep the shareable policy file free of per-machine state.
 
 use std::collections::HashMap;
 use std::fs;
@@ -59,14 +59,8 @@ pub fn has_armed_entry(state: &CredentialStateFile, id: &str) -> bool {
     }
 }
 
-/// Falls back to `./.lns-credentials.json` when `HOME` is unset rather than panicking.
 pub fn default_credentials_path() -> PathBuf {
-    if let Some(p) = std::env::var_os("LNS_CREDENTIALS_PATH") {
-        return PathBuf::from(p);
-    }
-    std::env::var_os("HOME")
-        .map(|h| PathBuf::from(h).join(".lns-credentials.json"))
-        .unwrap_or_else(|| PathBuf::from(".lns-credentials.json"))
+    lns_spec::lns_home().join("credentials.json")
 }
 
 pub struct JsonFileCredentialStore {
@@ -287,37 +281,26 @@ mod tests {
 
     #[test]
     #[serial_test::serial(env)]
-    fn default_credentials_path_uses_override_when_set() {
+    fn default_credentials_path_names_a_file_inside_the_lns_home() {
         use crate::test_env::EnvVarGuard;
-        let _g1 = EnvVarGuard::set("LNS_CREDENTIALS_PATH", "/tmp/custom-creds.json");
-        let _g2 = EnvVarGuard::set("HOME", "/tmp/home-should-be-ignored");
-        assert_eq!(
-            default_credentials_path(),
-            PathBuf::from("/tmp/custom-creds.json")
-        );
-    }
-
-    #[test]
-    #[serial_test::serial(env)]
-    fn default_credentials_path_falls_back_to_home_dotfile() {
-        use crate::test_env::EnvVarGuard;
-        let _g1 = EnvVarGuard::unset("LNS_CREDENTIALS_PATH");
+        let _g1 = EnvVarGuard::unset("LNS_HOME");
         let _g2 = EnvVarGuard::set("HOME", "/home/dev");
         assert_eq!(
             default_credentials_path(),
-            PathBuf::from("/home/dev/.lns-credentials.json")
+            PathBuf::from("/home/dev/.lns/credentials.json")
         );
     }
 
     #[test]
     #[serial_test::serial(env)]
-    fn default_credentials_path_falls_back_to_cwd_when_home_unset() {
+    fn default_credentials_path_follows_the_lns_home_override() {
         use crate::test_env::EnvVarGuard;
-        let _g1 = EnvVarGuard::unset("LNS_CREDENTIALS_PATH");
-        let _g2 = EnvVarGuard::unset("HOME");
+        let _g1 = EnvVarGuard::set("LNS_HOME", "/srv/lns-state");
+        let _g2 = EnvVarGuard::set("HOME", "/home/should-be-ignored");
         assert_eq!(
             default_credentials_path(),
-            PathBuf::from(".lns-credentials.json")
+            PathBuf::from("/srv/lns-state/credentials.json"),
+            "one variable moves every file lns keeps, so this one must not need its own"
         );
     }
 

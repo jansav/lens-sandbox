@@ -120,22 +120,8 @@ impl RunSection {
     }
 }
 
-pub fn default_config_path() -> Result<PathBuf> {
-    config_path_with(
-        |k| std::env::var_os(k).map(PathBuf::from),
-        dirs::config_dir(),
-    )
-}
-
-pub fn config_path_with(
-    env: impl Fn(&str) -> Option<PathBuf>,
-    config_dir: Option<PathBuf>,
-) -> Result<PathBuf> {
-    if let Some(p) = env("LNS_CONFIG_PATH") {
-        return Ok(p);
-    }
-    let dir = config_dir.context("could not determine the user config directory")?;
-    Ok(dir.join("lns").join("config.yaml"))
+pub fn default_config_path() -> PathBuf {
+    lns_spec::lns_home().join("config.yaml")
 }
 
 pub fn load(path: &Path) -> Result<ConfigFile> {
@@ -179,7 +165,7 @@ pub const SPEC: CommandSpec = CommandSpec {
 pub fn run_command<'a>(matches: &'a clap::ArgMatches, ctx: RunCtx<'a>) -> RunFuture<'a> {
     Box::pin(async move {
         let args = ConfigArgs::from_arg_matches(matches)?;
-        let path = default_config_path()?;
+        let path = default_config_path();
         let mut out = ctx.out;
         run(&args.command, &path, &mut out)
     })
@@ -460,8 +446,8 @@ mod tests {
     #[serial_test::serial(env)]
     async fn run_command_resolves_the_default_path_and_writes_a_stored_default() {
         let dir = TempDir::new().unwrap();
+        let _scope = crate::test_env::EnvScope::set("LNS_HOME", dir.path());
         let cfg = dir.path().join("config.yaml");
-        let _scope = crate::test_env::EnvScope::set("LNS_CONFIG_PATH", &cfg);
 
         let set = crate::command::build_cli()
             .try_get_matches_from(["lns", "config", "set", "run.cpus", "4"])
@@ -644,47 +630,25 @@ mod tests {
     }
 
     #[test]
-    fn config_path_with_prefers_the_env_override() {
-        let path = config_path_with(
-            |k| (k == "LNS_CONFIG_PATH").then(|| PathBuf::from("/tmp/elsewhere.yaml")),
-            Some(PathBuf::from("/home/dev/.config")),
-        )
-        .unwrap();
-        assert_eq!(path, PathBuf::from("/tmp/elsewhere.yaml"));
-    }
-
-    #[test]
-    fn config_path_with_defaults_to_lns_config_yaml_under_the_config_dir() {
-        let path = config_path_with(|_| None, Some(PathBuf::from("/home/dev/.config"))).unwrap();
-        assert_eq!(path, PathBuf::from("/home/dev/.config/lns/config.yaml"));
-    }
-
-    #[test]
-    fn config_path_with_errors_when_no_config_dir_exists() {
-        let err = config_path_with(|_| None, None).unwrap_err();
-        assert!(
-            format!("{err:#}").contains("config directory"),
-            "got: {err:#}"
-        );
-    }
-
-    #[test]
     #[serial_test::serial(env)]
-    fn default_config_path_honours_the_lns_config_path_override() {
-        let _guard = crate::test_env::EnvScope::set("LNS_CONFIG_PATH", "/tmp/override.yaml");
+    fn default_config_path_sits_beside_the_other_files_lns_keeps() {
+        let _g1 = crate::test_env::EnvScope::unset("LNS_HOME");
+        let _g2 = crate::test_env::EnvScope::set("HOME", "/home/dev");
         assert_eq!(
-            default_config_path().unwrap(),
-            PathBuf::from("/tmp/override.yaml")
+            default_config_path(),
+            PathBuf::from("/home/dev/.lns/config.yaml")
         );
     }
 
     #[test]
     #[serial_test::serial(env)]
-    fn default_config_path_lands_under_the_user_config_dir() {
-        let _guard = crate::test_env::EnvScope::unset("LNS_CONFIG_PATH");
-        let path = default_config_path().unwrap();
-        assert!(path.ends_with("lns/config.yaml"), "got: {path:?}");
-        assert!(path.is_absolute(), "got: {path:?}");
+    fn default_config_path_follows_the_lns_home_override() {
+        let _guard = crate::test_env::EnvScope::set("LNS_HOME", "/srv/lns-state");
+        assert_eq!(
+            default_config_path(),
+            PathBuf::from("/srv/lns-state/config.yaml"),
+            "one variable moves every file lns keeps, so config must not need its own"
+        );
     }
 
     fn bare_run_args() -> RunArgs {

@@ -1444,7 +1444,7 @@ mod tests {
     async fn handle_request_volume_lifecycle_round_trips_through_the_store() {
         let d = tempfile::tempdir().unwrap();
         let _h = crate::test_env::EnvVarGuard::set("HOME", d.path());
-        let _x = crate::test_env::EnvVarGuard::set("XDG_CACHE_HOME", d.path().join("cache"));
+        let _x = crate::test_env::EnvVarGuard::set("LNS_HOME", d.path().join(".lns"));
         let now = Instant::now();
 
         let created = as_json(
@@ -1520,7 +1520,7 @@ mod tests {
     async fn handle_request_inspect_of_an_unknown_volume_surfaces_the_store_error() {
         let d = tempfile::tempdir().unwrap();
         let _h = crate::test_env::EnvVarGuard::set("HOME", d.path());
-        let _x = crate::test_env::EnvVarGuard::set("XDG_CACHE_HOME", d.path().join("cache"));
+        let _x = crate::test_env::EnvVarGuard::set("LNS_HOME", d.path().join(".lns"));
         let resp = as_json(
             handle_request(
                 &Request::InspectVolume {
@@ -2911,7 +2911,7 @@ mod tests {
     async fn handle_request_remove_of_an_unknown_image_surfaces_the_store_error() {
         let d = tempfile::tempdir().unwrap();
         let _h = crate::test_env::EnvVarGuard::set("HOME", d.path());
-        let _x = crate::test_env::EnvVarGuard::set("XDG_CACHE_HOME", d.path().join("cache"));
+        let _x = crate::test_env::EnvVarGuard::set("LNS_HOME", d.path().join(".lns"));
         let resp = as_json(
             handle_request(
                 &Request::RemoveImage {
@@ -2931,10 +2931,10 @@ mod tests {
     async fn handle_request_pull_of_a_mixin_caches_its_graph_and_records_no_row() {
         let d = tempfile::tempdir().unwrap();
         let _h = crate::test_env::EnvVarGuard::set("HOME", d.path());
-        let _x = crate::test_env::EnvVarGuard::set("XDG_CACHE_HOME", d.path().join("cache"));
+        let _x = crate::test_env::EnvVarGuard::set("LNS_HOME", d.path().join(".lns"));
         let now = Instant::now();
         let manifest_cache = crate::image::manifest_cache::ManifestCache::new(
-            crate::cache::root().unwrap().join("manifests"),
+            crate::cache::root().join("manifests"),
         );
 
         let child = seed_mixin(&manifest_cache, "child", r#"{"tools":["node@22"]}"#);
@@ -3013,7 +3013,7 @@ mod tests {
     async fn handle_request_image_lifecycle_round_trips_offline_via_the_caches() {
         let d = tempfile::tempdir().unwrap();
         let _h = crate::test_env::EnvVarGuard::set("HOME", d.path());
-        let _x = crate::test_env::EnvVarGuard::set("XDG_CACHE_HOME", d.path().join("cache"));
+        let _x = crate::test_env::EnvVarGuard::set("LNS_HOME", d.path().join(".lns"));
         let now = Instant::now();
 
         use sha2::Digest;
@@ -3035,7 +3035,7 @@ mod tests {
         );
         let base_ref = format!("registry.example.test/cov/base@{base_digest}");
 
-        let cache_root = crate::cache::root().unwrap();
+        let cache_root = crate::cache::root();
         let layer_cache = crate::oci_layer_cache::LayerCache::new(cache_root.join("layers"));
         layer_cache
             .install_from_bytes(&layer_digest, &layer_bytes)
@@ -3184,11 +3184,11 @@ mod tests {
     async fn handle_request_pull_of_a_sandbox_artifact_caches_it_with_its_base_image() {
         let d = tempfile::tempdir().unwrap();
         let _h = crate::test_env::EnvVarGuard::set("HOME", d.path());
-        let _x = crate::test_env::EnvVarGuard::set("XDG_CACHE_HOME", d.path().join("cache"));
+        let _x = crate::test_env::EnvVarGuard::set("LNS_HOME", d.path().join(".lns"));
         let now = Instant::now();
 
         use sha2::Digest;
-        let cache_root = crate::cache::root().unwrap();
+        let cache_root = crate::cache::root();
         let manifest_cache =
             crate::image::manifest_cache::ManifestCache::new(cache_root.join("manifests"));
         let layer_cache = crate::oci_layer_cache::LayerCache::new(cache_root.join("layers"));

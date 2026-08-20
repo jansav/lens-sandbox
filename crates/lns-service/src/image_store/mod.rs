@@ -446,7 +446,7 @@ fn now_unix_secs() -> u64 {
 }
 
 fn images_root() -> Result<PathBuf> {
-    Ok(crate::cache::root()?.join("images"))
+    Ok(crate::cache::root().join("images"))
 }
 
 fn cache_lock() -> &'static tokio::sync::RwLock<()> {
@@ -551,7 +551,7 @@ async fn finish_pull_with<F: Fs>(
 }
 
 pub async fn pull(image: &str, expected_digest: &str) -> Result<PullOutcome> {
-    let layer_cache = crate::oci_layer_cache::LayerCache::new(crate::cache::root()?.join("layers"));
+    let layer_cache = crate::oci_layer_cache::LayerCache::new(crate::cache::root().join("layers"));
     let sandbox = match crate::image::pull_artifact(image).await? {
         crate::image::PulledArtifact::Sandbox(sandbox) => sandbox,
         crate::image::PulledArtifact::Mixin(mixin) => {
@@ -633,7 +633,7 @@ pub async fn remove(image: &str) -> Result<RemovedImage> {
     let _exclusive = cache_lock().write().await;
     remove_with(
         &real::RealFs,
-        &real::RealCaches::new(&crate::cache::root()?),
+        &real::RealCaches::new(&crate::cache::root()),
         &images_root()?,
         &crate::run_registry::snapshot(),
         image,
@@ -651,13 +651,13 @@ pub async fn prune() -> Result<PruneReport> {
     let _exclusive = cache_lock().write().await;
     let mut report = prune_with(
         &real::RealFs,
-        &real::RealCaches::new(&crate::cache::root()?),
+        &real::RealCaches::new(&crate::cache::root()),
         &images_root()?,
         &crate::run_registry::snapshot(),
     )
     .await?;
     report.reclaimed_bytes +=
-        crate::build_cache::sweep_with(&real::RealFs, &lns_ipc::build_cache_root()?).await?;
+        crate::build_cache::sweep_with(&real::RealFs, &lns_ipc::build_cache_root()).await?;
     Ok(report)
 }
 
@@ -2161,7 +2161,7 @@ mod tests {
     async fn lifecycle_production_wrappers_round_trip_under_the_cache_root() {
         let d = tempfile::tempdir().unwrap();
         let _h = crate::test_env::EnvVarGuard::set("HOME", d.path());
-        let _x = crate::test_env::EnvVarGuard::set("XDG_CACHE_HOME", d.path().join("cache"));
+        let _x = crate::test_env::EnvVarGuard::set("LNS_HOME", d.path().join(".lns"));
 
         let reference: oci_client::Reference =
             "registry.example.test/cov/lifecycle:1".parse().unwrap();
@@ -2207,7 +2207,7 @@ mod tests {
     async fn record_artifact_run_persists_the_sandbox_dependency_under_the_cache_root() {
         let d = tempfile::tempdir().unwrap();
         let _h = crate::test_env::EnvVarGuard::set("HOME", d.path());
-        let _x = crate::test_env::EnvVarGuard::set("XDG_CACHE_HOME", d.path().join("cache"));
+        let _x = crate::test_env::EnvVarGuard::set("LNS_HOME", d.path().join(".lns"));
         let base = format!("registry.example.test/team/base@sha256:{}", "a".repeat(64));
 
         record_artifact_run("registry.example.test/team/agent:1", "sha256:m", &base)

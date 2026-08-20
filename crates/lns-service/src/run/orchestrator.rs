@@ -126,7 +126,7 @@ async fn orchestrate(
     let started = std::time::Instant::now();
     let prepare_started = std::time::Instant::now();
 
-    let cache_dir = cache::root()?;
+    let cache_dir = cache::root();
     let layer_cache = oci_layer_cache::LayerCache::new(cache_dir.join("layers"));
     let content_store = content_store::ContentStore::new(cache_dir.join("content"));
     let run_scratch_dir = cache_dir.join("runs").join(&run_id);

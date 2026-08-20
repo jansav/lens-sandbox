@@ -23,7 +23,7 @@ impl Fetcher for RealFetcher {
 }
 
 pub async fn ensure() -> Result<GuestTools> {
-    let cache = cache_subpath(&crate::cache::root()?);
+    let cache = cache_subpath(&crate::cache::root());
     let build_id = BUILD_ID.get_or_try_init(compute_build_id).await?;
     ensure_with(&RealFetcher, cache, build_id, PACKAGES).await
 }

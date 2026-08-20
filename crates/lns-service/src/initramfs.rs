@@ -21,7 +21,7 @@ pub async fn build(_tools: &GuestTools) -> Result<PathBuf> {
     let init_bytes = resolve_lns_init_bytes(EMBEDDED_LNS_INIT, |k| std::env::var_os(k))?;
     let broker_bytes = resolve_broker_bytes(EMBEDDED_LNS_SESSION_BROKER, |k| std::env::var_os(k))?;
     let key = content_hash(&init_bytes, &broker_bytes);
-    let cache_dir = crate::cache::root()?.join("initramfs").join(&key[..16]);
+    let cache_dir = crate::cache::root().join("initramfs").join(&key[..16]);
     let path = cache_dir.join("initramfs.cpio.gz");
     if path.exists() {
         return Ok(path);
@@ -221,8 +221,7 @@ mod tests {
         let tmphome = tempfile::TempDir::new().unwrap();
         let target = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml");
         let _home = crate::test_env::EnvVarGuard::set("HOME", tmphome.path());
-        let _xdg =
-            crate::test_env::EnvVarGuard::set("XDG_CACHE_HOME", tmphome.path().join(".cache"));
+        let _lns_home = crate::test_env::EnvVarGuard::set("LNS_HOME", tmphome.path().join(".lns"));
         let _init = crate::test_env::EnvVarGuard::set("LNS_INIT_BIN", &target);
         let _broker = crate::test_env::EnvVarGuard::set("LNS_SESSION_BROKER_BIN", &target);
 

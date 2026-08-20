@@ -7,8 +7,8 @@ use serde_json::{Map, Value};
 
 use crate::oauth::Clock;
 
-pub fn audit_path(run_id: &str) -> Result<PathBuf> {
-    Ok(lns_ipc::audit_log_for_run(run_id)?)
+pub fn audit_path(run_id: &str) -> PathBuf {
+    lns_ipc::audit_log_for_run(run_id)
 }
 
 pub fn anchor_path_for(audit_path: &Path) -> PathBuf {
@@ -243,11 +243,7 @@ pub fn record_run_launched(
     image: &str,
     clock: &dyn Clock,
 ) -> Result<()> {
-    record_run_launched_at(
-        &audit_path(run_id)?,
-        &run_ctx(run_id, microvm, clock),
-        image,
-    )
+    record_run_launched_at(&audit_path(run_id), &run_ctx(run_id, microvm, clock), image)
 }
 
 pub fn record_sandbox_run_at(
@@ -274,7 +270,7 @@ pub fn record_sandbox_run(
     clock: &dyn Clock,
 ) -> Result<()> {
     record_sandbox_run_at(
-        &audit_path(run_id)?,
+        &audit_path(run_id),
         &run_ctx(run_id, microvm, clock),
         reference,
         digest,
@@ -308,7 +304,7 @@ pub fn record_tool_provisioned(
     clock: &dyn Clock,
 ) -> Result<()> {
     record_tool_provisioned_at(
-        &audit_path(run_id)?,
+        &audit_path(run_id),
         &run_ctx(run_id, microvm, clock),
         outcome,
     )
@@ -331,7 +327,7 @@ pub fn record_volume_attached(
     clock: &dyn Clock,
 ) -> Result<()> {
     record_volume_attached_at(
-        &audit_path(run_id)?,
+        &audit_path(run_id),
         &run_ctx(run_id, microvm, clock),
         name,
         target,
@@ -362,7 +358,7 @@ pub fn record_bind_attached(
     clock: &dyn Clock,
 ) -> Result<()> {
     record_bind_attached_at(
-        &audit_path(run_id)?,
+        &audit_path(run_id),
         &run_ctx(run_id, microvm, clock),
         source,
         target,
@@ -466,7 +462,7 @@ mod tests {
     fn record_sandbox_run_writes_under_the_runs_audit_log() {
         let d = tempfile::tempdir().unwrap();
         let _h = crate::test_env::EnvVarGuard::set("HOME", d.path());
-        let _x = crate::test_env::EnvVarGuard::set("XDG_CACHE_HOME", d.path().join("cache"));
+        let _x = crate::test_env::EnvVarGuard::set("LNS_HOME", d.path().join(".lns"));
         record_sandbox_run(
             "aa125",
             "calm-finch",
@@ -477,7 +473,7 @@ mod tests {
             &CLOCK,
         )
         .unwrap();
-        let content = std::fs::read_to_string(audit_path("aa125").unwrap()).unwrap();
+        let content = std::fs::read_to_string(audit_path("aa125")).unwrap();
         assert!(
             content.contains("\"lns_sandbox\":\"reg/some-agent:1\""),
             "{content}"
@@ -587,7 +583,7 @@ mod tests {
     fn record_bind_attached_writes_under_the_runs_audit_log() {
         let d = tempfile::tempdir().unwrap();
         let _h = crate::test_env::EnvVarGuard::set("HOME", d.path());
-        let _x = crate::test_env::EnvVarGuard::set("XDG_CACHE_HOME", d.path().join("cache"));
+        let _x = crate::test_env::EnvVarGuard::set("LNS_HOME", d.path().join(".lns"));
         record_bind_attached(
             "aa123",
             "calm-finch",
@@ -598,7 +594,7 @@ mod tests {
             &CLOCK,
         )
         .unwrap();
-        let content = std::fs::read_to_string(audit_path("aa123").unwrap()).unwrap();
+        let content = std::fs::read_to_string(audit_path("aa123")).unwrap();
         assert!(
             content.contains("\"lns_source\":\"/Users/me/proj\""),
             "{content}"
@@ -611,7 +607,7 @@ mod tests {
     fn record_tool_provisioned_writes_under_the_runs_audit_log() {
         let d = tempfile::tempdir().unwrap();
         let _h = crate::test_env::EnvVarGuard::set("HOME", d.path());
-        let _x = crate::test_env::EnvVarGuard::set("XDG_CACHE_HOME", d.path().join("cache"));
+        let _x = crate::test_env::EnvVarGuard::set("LNS_HOME", d.path().join(".lns"));
         let outcome = crate::tools::ProvisionOutcome {
             tool: "some-tool".into(),
             requested: "some-tool@1".into(),
@@ -620,7 +616,7 @@ mod tests {
             source_host: Some("upstream.example.test".into()),
         };
         record_tool_provisioned("aa125", "calm-finch", &outcome, &CLOCK).unwrap();
-        let content = std::fs::read_to_string(audit_path("aa125").unwrap()).unwrap();
+        let content = std::fs::read_to_string(audit_path("aa125")).unwrap();
         assert!(content.contains("\"lns_resolved\":\"1.2.3\""), "{content}");
         assert!(
             content.contains("\"lns_source\":\"upstream.example.test\""),
@@ -652,7 +648,7 @@ mod tests {
     #[test]
     #[serial_test::serial(env)]
     fn audit_path_lands_under_the_run_directory() {
-        let p = audit_path("aa99").unwrap();
+        let p = audit_path("aa99");
         assert!(p.ends_with("runs/aa99/audit.jsonl"), "got {}", p.display());
     }
 
@@ -661,9 +657,9 @@ mod tests {
     fn record_volume_attached_writes_under_the_runs_audit_log() {
         let d = tempfile::tempdir().unwrap();
         let _h = crate::test_env::EnvVarGuard::set("HOME", d.path());
-        let _x = crate::test_env::EnvVarGuard::set("XDG_CACHE_HOME", d.path().join("cache"));
+        let _x = crate::test_env::EnvVarGuard::set("LNS_HOME", d.path().join(".lns"));
         record_volume_attached("aa123", "calm-finch", "prism-data", "/data", &CLOCK).unwrap();
-        let content = std::fs::read_to_string(audit_path("aa123").unwrap()).unwrap();
+        let content = std::fs::read_to_string(audit_path("aa123")).unwrap();
         assert!(content.contains("\"lns_name\":\"prism-data\""), "{content}");
         assert!(content.contains("\"lns_target\":\"/data\""), "{content}");
     }
@@ -673,9 +669,9 @@ mod tests {
     fn record_run_launched_writes_under_the_runs_audit_log() {
         let d = tempfile::tempdir().unwrap();
         let _h = crate::test_env::EnvVarGuard::set("HOME", d.path());
-        let _x = crate::test_env::EnvVarGuard::set("XDG_CACHE_HOME", d.path().join("cache"));
+        let _x = crate::test_env::EnvVarGuard::set("LNS_HOME", d.path().join(".lns"));
         record_run_launched("aa124", "calm-finch", "alpine:latest", &CLOCK).unwrap();
-        let content = std::fs::read_to_string(audit_path("aa124").unwrap()).unwrap();
+        let content = std::fs::read_to_string(audit_path("aa124")).unwrap();
         assert!(
             content.contains("\"lns_image\":\"alpine:latest\""),
             "{content}"

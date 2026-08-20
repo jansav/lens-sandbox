@@ -94,7 +94,7 @@ async fn run_provisioner(
     requests: &[ToolRef],
     target: &ProvisionTarget,
 ) -> Result<Vec<StagedTool>> {
-    let cache_dir = cache::root()?;
+    let cache_dir = cache::root();
     let staging = cache_dir.join("runs").join(scratch_id).join("tool-staging");
     std::fs::create_dir_all(&staging).with_context(|| format!("creating {}", staging.display()))?;
 

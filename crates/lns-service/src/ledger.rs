@@ -36,8 +36,8 @@ fn append_machine_event(event: serde_json::Map<String, serde_json::Value>) -> Re
     let _guard = WRITE_LOCK
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let path = lns_ipc::connection_ledger()?;
-    let anchor_path = lns_ipc::connection_ledger_anchor()?;
+    let path = lns_ipc::connection_ledger();
+    let anchor_path = lns_ipc::connection_ledger_anchor();
     append_machine_event_at(&path, &anchor_path, event)
 }
 
@@ -260,7 +260,7 @@ mod tests {
     fn a_pulled_sandboxs_tool_acquisition_is_readable_off_the_machine_chain() {
         let d = tempfile::tempdir().unwrap();
         let _h = crate::test_env::EnvVarGuard::set("HOME", d.path());
-        let _x = crate::test_env::EnvVarGuard::set("XDG_DATA_HOME", d.path().join("data"));
+        let _x = crate::test_env::EnvVarGuard::set("LNS_HOME", d.path().join(".lns"));
         let cx = crate::ocsf_audit::OcsfCtx::at_unix(
             "pull-1a2b3c4d5e6f".into(),
             String::new(),
@@ -278,7 +278,7 @@ mod tests {
         )
         .unwrap();
 
-        let path = lns_ipc::connection_ledger().unwrap();
+        let path = lns_ipc::connection_ledger();
         let events: Vec<_> = lns_audit::stream_ledger(&path)
             .unwrap()
             .collect::<Result<_>>()
@@ -288,7 +288,7 @@ mod tests {
         assert_eq!(row.kind, "tool");
         assert_eq!(row.detail, "provisioned node@22 → 22.11.0 from nodejs.org");
         assert_eq!(
-            crate::audit::read_anchor(&lns_ipc::connection_ledger_anchor().unwrap())
+            crate::audit::read_anchor(&lns_ipc::connection_ledger_anchor())
                 .expect("anchor written")
                 .line_count,
             1,
@@ -301,9 +301,9 @@ mod tests {
     fn append_ledger_record_writes_under_data_root() {
         let d = tempfile::tempdir().unwrap();
         let _h = crate::test_env::EnvVarGuard::set("HOME", d.path());
-        let _x = crate::test_env::EnvVarGuard::set("XDG_DATA_HOME", d.path().join("data"));
+        let _x = crate::test_env::EnvVarGuard::set("LNS_HOME", d.path().join(".lns"));
         append_ledger_record(&sample("aa07")).unwrap();
-        let content = std::fs::read_to_string(lns_ipc::connection_ledger().unwrap()).unwrap();
+        let content = std::fs::read_to_string(lns_ipc::connection_ledger()).unwrap();
         assert!(content.contains("\"lns_run\":\"aa07\""), "{content}");
     }
 
@@ -351,7 +351,7 @@ mod tests {
     fn the_file_recorder_persists_under_data_root() {
         let d = tempfile::tempdir().unwrap();
         let _h = crate::test_env::EnvVarGuard::set("HOME", d.path());
-        let _x = crate::test_env::EnvVarGuard::set("XDG_DATA_HOME", d.path().join("data"));
+        let _x = crate::test_env::EnvVarGuard::set("LNS_HOME", d.path().join(".lns"));
         let recorder = RunLedgerRecorder::new(
             "aa07".into(),
             "vm".into(),
@@ -365,7 +365,7 @@ mod tests {
             connector: None,
         });
         drop(recorder);
-        let content = std::fs::read_to_string(lns_ipc::connection_ledger().unwrap()).unwrap();
+        let content = std::fs::read_to_string(lns_ipc::connection_ledger()).unwrap();
         assert!(content.contains("\"lns_run\":\"aa07\""), "{content}");
         assert!(content.contains("deny_once"), "{content}");
     }
@@ -439,7 +439,7 @@ mod tests {
     fn concurrent_runs_appending_produce_one_unbroken_chain() {
         let d = tempfile::tempdir().unwrap();
         let _h = crate::test_env::EnvVarGuard::set("HOME", d.path());
-        let _x = crate::test_env::EnvVarGuard::set("XDG_DATA_HOME", d.path().join("data"));
+        let _x = crate::test_env::EnvVarGuard::set("LNS_HOME", d.path().join(".lns"));
         let threads: u32 = 8;
         let per_thread: u32 = 25;
         std::thread::scope(|scope| {
@@ -453,7 +453,7 @@ mod tests {
             }
         });
 
-        let content = std::fs::read_to_string(lns_ipc::connection_ledger().unwrap()).unwrap();
+        let content = std::fs::read_to_string(lns_ipc::connection_ledger()).unwrap();
         let lines: Vec<&str> = content.lines().filter(|l| !l.trim().is_empty()).collect();
         assert_eq!(lines.len(), (threads * per_thread) as usize);
         let mut expected_prev = lns_ipc::GENESIS_PREV_HASH.to_string();
@@ -466,8 +466,7 @@ mod tests {
             );
             expected_prev = lns_ipc::line_hash(line.as_bytes());
         }
-        let anchor =
-            crate::audit::read_anchor(&lns_ipc::connection_ledger_anchor().unwrap()).unwrap();
+        let anchor = crate::audit::read_anchor(&lns_ipc::connection_ledger_anchor()).unwrap();
         assert_eq!(anchor.line_count, (threads * per_thread) as u64);
     }
 }

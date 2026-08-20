@@ -80,13 +80,13 @@ impl Fetcher for RealFetcher {
 
 struct RealStore;
 impl RealStore {
-    fn root() -> Result<PathBuf> {
-        Ok(lns_ipc::data_root()?)
+    fn root() -> PathBuf {
+        lns_ipc::data_root()
     }
 }
 impl StateStore for RealStore {
     fn read_install_id(&self) -> Result<Option<String>> {
-        let path = Self::root()?.join("install-id");
+        let path = Self::root().join("install-id");
         match std::fs::read_to_string(&path) {
             Ok(s) => {
                 let t = s.trim();
@@ -97,12 +97,12 @@ impl StateStore for RealStore {
         }
     }
     fn write_install_id(&self, id: &str) -> Result<()> {
-        let root = Self::root()?;
+        let root = Self::root();
         std::fs::create_dir_all(&root)?;
         std::fs::write(root.join("install-id"), id).context("writing install-id")
     }
     fn write_status(&self, status: &UpdateStatus) -> Result<()> {
-        let root = Self::root()?;
+        let root = Self::root();
         std::fs::create_dir_all(&root)?;
         let json = serde_json::to_string(status).context("serializing update status")?;
         std::fs::write(root.join("update-status.json"), json).context("writing update status")

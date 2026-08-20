@@ -197,7 +197,7 @@ pub async fn pull_artifact(image: &str) -> Result<super::PulledArtifact> {
 }
 
 pub(crate) fn caching_registry_for(image: &str) -> Result<CachingRegistry<RealRegistry>> {
-    let manifests = crate::cache::root()?.join("manifests");
+    let manifests = crate::cache::root().join("manifests");
     let auth = registry_auth_for(image);
     let inner = match image.parse::<Reference>() {
         Ok(parsed) => RealRegistry::for_reference(&parsed, auth),

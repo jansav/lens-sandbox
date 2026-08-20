@@ -35,7 +35,7 @@ async fn ensure_with(env_get: impl Fn(&str) -> Option<std::ffi::OsString>) -> Re
         return Ok(p);
     }
 
-    let cache = crate::cache::root()?.join("kernel");
+    let cache = crate::cache::root().join("kernel");
     let cdn_base = env_get("LNS_KERNEL_CDN")
         .and_then(|v| v.into_string().ok())
         .unwrap_or_else(|| CDN_BASE.to_string());
@@ -187,8 +187,8 @@ mod tests {
         let _path = crate::test_env::EnvVarGuard::unset("LNS_KERNEL_PATH");
         let _cdn = crate::test_env::EnvVarGuard::set("LNS_KERNEL_CDN", server.uri());
         let _home = crate::test_env::EnvVarGuard::set("HOME", cache_root.path());
-        let _xdg =
-            crate::test_env::EnvVarGuard::set("XDG_CACHE_HOME", cache_root.path().join("xdg"));
+        let _lns_home =
+            crate::test_env::EnvVarGuard::set("LNS_HOME", cache_root.path().join(".lns"));
         let result = ensure().await;
 
         let err = result.expect_err("wiremock bytes won't match KERNEL_SHA256");
@@ -223,8 +223,8 @@ mod tests {
         let _path = crate::test_env::EnvVarGuard::unset("LNS_KERNEL_PATH");
         let _cdn = crate::test_env::EnvVarGuard::set("LNS_KERNEL_CDN", server.uri());
         let _home = crate::test_env::EnvVarGuard::set("HOME", cache_root.path());
-        let _xdg =
-            crate::test_env::EnvVarGuard::set("XDG_CACHE_HOME", cache_root.path().join("xdg"));
+        let _lns_home =
+            crate::test_env::EnvVarGuard::set("LNS_HOME", cache_root.path().join(".lns"));
         let result = ensure().await;
 
         let err = result.expect_err("503 must bail");
@@ -248,8 +248,8 @@ mod tests {
         let _path = crate::test_env::EnvVarGuard::unset("LNS_KERNEL_PATH");
         let _cdn = crate::test_env::EnvVarGuard::set("LNS_KERNEL_CDN", format!("http://{addr}"));
         let _home = crate::test_env::EnvVarGuard::set("HOME", cache_root.path());
-        let _xdg =
-            crate::test_env::EnvVarGuard::set("XDG_CACHE_HOME", cache_root.path().join("xdg"));
+        let _lns_home =
+            crate::test_env::EnvVarGuard::set("LNS_HOME", cache_root.path().join(".lns"));
         let result = ensure().await;
 
         let err = result.expect_err("connect-refused must bail");

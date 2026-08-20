@@ -39,7 +39,7 @@ pub fn run_command<'a>(matches: &'a clap::ArgMatches, ctx: RunCtx<'a>) -> RunFut
 
 pub async fn launch_run(mut args: RunArgs, debug: bool) -> Result<i32> {
     args.env = crate::run::env_file::merged_run_env(&args.env_file, &args.env)?;
-    let config_path = crate::config::default_config_path()?;
+    let config_path = crate::config::default_config_path();
     let defaults = crate::config::load_run_defaults(&config_path)?;
     let args = crate::config::apply_run_defaults(args, defaults);
     let cwd = std::env::current_dir().context("reading current directory")?;

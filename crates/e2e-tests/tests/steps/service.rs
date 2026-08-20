@@ -19,7 +19,7 @@ pub(crate) fn start_service_with(world: &mut E2eWorld, extra: &[(&str, &str)]) {
     ];
     if let Some(home) = &world.home {
         envs.push(("HOME", home.path().into()));
-        envs.push(("XDG_CACHE_HOME", home.path().join(".cache").into()));
+        envs.push(("LNS_HOME", home.path().join(".lns").into()));
     }
     envs.extend(extra.iter().map(|(k, v)| (*k, std::ffi::OsString::from(v))));
     let result = run_cli_with_env(["service", "start"], envs);
@@ -101,7 +101,10 @@ fn connect_connector(world: &mut E2eWorld, id: String) {
         .expect("a home holds the connector catalog")
         .path()
         .to_path_buf();
-    let mut envs: Vec<(&str, std::ffi::OsString)> = vec![("HOME", home.clone().into())];
+    let mut envs: Vec<(&str, std::ffi::OsString)> = vec![
+        ("HOME", home.clone().into()),
+        ("LNS_HOME", home.join(".lns").into()),
+    ];
     if let Some(sock) = &world.service_socket {
         envs.push(("LNS_SOCKET_PATH", sock.clone().into()));
     }

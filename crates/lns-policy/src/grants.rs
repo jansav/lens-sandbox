@@ -1,4 +1,4 @@
-//! Per-workload connector grants live in `~/.lns-workload-grants.json`, per-machine and never committed — a grant lets one workload spend a machine-global credential, which is a per-machine risk acceptance, not a shareable rule.
+//! Per-workload connector grants live in `~/.lns/workload-grants.json`, per-machine and never committed — a grant lets one workload spend a machine-global credential, which is a per-machine risk acceptance, not a shareable rule.
 
 use std::fs;
 use std::io;
@@ -337,14 +337,8 @@ pub fn project_key(policy_path: &Path) -> String {
         .into_owned()
 }
 
-/// Falls back to `./.lns-workload-grants.json` when `HOME` is unset rather than panicking.
 pub fn default_workload_grants_path() -> PathBuf {
-    if let Some(p) = std::env::var_os("LNS_WORKLOAD_GRANTS_PATH") {
-        return PathBuf::from(p);
-    }
-    std::env::var_os("HOME")
-        .map(|h| PathBuf::from(h).join(".lns-workload-grants.json"))
-        .unwrap_or_else(|| PathBuf::from(".lns-workload-grants.json"))
+    lns_spec::lns_home().join("workload-grants.json")
 }
 
 pub struct JsonFileGrantStore {
@@ -356,7 +350,7 @@ impl JsonFileGrantStore {
         Self { path }
     }
 
-    /// Suffixed rather than `with_extension`, which would replace the sidecar's own extension on an arbitrary `LNS_WORKLOAD_GRANTS_PATH`.
+    /// Suffixed rather than `with_extension`, which would replace the sidecar's own extension.
     fn lock_path(&self) -> PathBuf {
         let mut p = self.path.clone().into_os_string();
         p.push(".lock");
@@ -972,37 +966,26 @@ mod tests {
 
     #[test]
     #[serial_test::serial(env)]
-    fn default_path_uses_override_when_set() {
+    fn default_workload_grants_path_names_a_file_inside_the_lns_home() {
         use crate::test_env::EnvVarGuard;
-        let _g1 = EnvVarGuard::set("LNS_WORKLOAD_GRANTS_PATH", "/tmp/custom-grants.json");
-        let _g2 = EnvVarGuard::set("HOME", "/tmp/home-should-be-ignored");
-        assert_eq!(
-            default_workload_grants_path(),
-            PathBuf::from("/tmp/custom-grants.json")
-        );
-    }
-
-    #[test]
-    #[serial_test::serial(env)]
-    fn default_path_falls_back_to_home_dotfile() {
-        use crate::test_env::EnvVarGuard;
-        let _g1 = EnvVarGuard::unset("LNS_WORKLOAD_GRANTS_PATH");
+        let _g1 = EnvVarGuard::unset("LNS_HOME");
         let _g2 = EnvVarGuard::set("HOME", "/home/dev");
         assert_eq!(
             default_workload_grants_path(),
-            PathBuf::from("/home/dev/.lns-workload-grants.json")
+            PathBuf::from("/home/dev/.lns/workload-grants.json")
         );
     }
 
     #[test]
     #[serial_test::serial(env)]
-    fn default_path_falls_back_to_cwd_when_home_unset() {
+    fn default_workload_grants_path_follows_the_lns_home_override() {
         use crate::test_env::EnvVarGuard;
-        let _g1 = EnvVarGuard::unset("LNS_WORKLOAD_GRANTS_PATH");
-        let _g2 = EnvVarGuard::unset("HOME");
+        let _g1 = EnvVarGuard::set("LNS_HOME", "/srv/lns-state");
+        let _g2 = EnvVarGuard::set("HOME", "/home/should-be-ignored");
         assert_eq!(
             default_workload_grants_path(),
-            PathBuf::from(".lns-workload-grants.json")
+            PathBuf::from("/srv/lns-state/workload-grants.json"),
+            "one variable moves every file lns keeps, so this one must not need its own"
         );
     }
 

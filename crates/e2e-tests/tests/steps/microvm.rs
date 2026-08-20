@@ -197,9 +197,7 @@ fn socket_env(world: &E2eWorld) -> Vec<(&'static str, std::ffi::OsString)> {
     let mut envs: Vec<(&'static str, std::ffi::OsString)> = Vec::new();
     if let Some(home) = &world.home {
         envs.push(("HOME", home.path().into()));
-        envs.push(("XDG_CACHE_HOME", home.path().join(".cache").into()));
-        envs.push(("XDG_CONFIG_HOME", home.path().join(".config").into()));
-        envs.push(("XDG_DATA_HOME", home.path().join(".local/share").into()));
+        envs.push(("LNS_HOME", home.path().join(".lns").into()));
     }
     if let Some(socket) = &world.service_socket {
         envs.push(("LNS_SOCKET_PATH", socket.clone().into()));
@@ -285,8 +283,10 @@ fn home_catalog_declares(world: &mut E2eWorld, id: String, env: String) {
     let catalog = format!(
         "connectors:\n  - id: {id}\n    authKind: credential\n    routes:\n      - match: api.{id}.example\n    credential:\n      envVar: {env}\n      placeholder: {id}-LNSPLACEHOLDER0000000000\n      injections:\n        - kind: bearer_header\n          domain: api.{id}.example\n"
     );
-    std::fs::write(home.path().join(".lns-connectors.yaml"), catalog)
-        .expect("write the user connector catalog");
+    let path = home.path().join(".lns/connectors.yaml");
+    std::fs::create_dir_all(path.parent().expect("the catalog has a parent"))
+        .expect("create the lns home");
+    std::fs::write(&path, catalog).expect("write the user connector catalog");
 }
 
 #[given(regex = r#"^the project definition declares connector "([^"]+)"$"#)]
@@ -320,8 +320,10 @@ fn home_catalog_declares_oauth(world: &mut E2eWorld, id: String, endpoint: Strin
     let catalog = format!(
         "connectors:\n  - id: {id}\n    authKind: oauth\n    routes:\n      - match: api.{id}.example\n    oauth:\n      clientId: some-client\n      deviceAuthorizationEndpoint: {endpoint}/device\n      tokenEndpoint: {endpoint}/token\n      envVar: SOME_OAUTH_TOKEN\n      placeholder: {id}-LNSPLACEHOLDER0000000000\n      injections:\n        - kind: bearer_header\n          domain: api.{id}.example\n"
     );
-    std::fs::write(home.path().join(".lns-connectors.yaml"), catalog)
-        .expect("write the user connector catalog");
+    let path = home.path().join(".lns/connectors.yaml");
+    std::fs::create_dir_all(path.parent().expect("the catalog has a parent"))
+        .expect("create the lns home");
+    std::fs::write(&path, catalog).expect("write the user connector catalog");
 }
 
 #[when("the user runs the sandbox definition")]
@@ -472,8 +474,7 @@ fn start_detached_with_volume(world: &mut E2eWorld, cmd_line: String, name: Stri
 }
 
 fn resolve_run_audit_log(run_id: &str) -> Result<std::path::PathBuf, String> {
-    let direct = lns_ipc::audit_log_for_run(run_id)
-        .map_err(|e| format!("resolving audit log path for run {run_id}: {e}"))?;
+    let direct = lns_ipc::audit_log_for_run(run_id);
     if direct.exists() {
         return Ok(direct);
     }

@@ -240,8 +240,8 @@ login (such as `ghcr.io`) still take the flag-driven forms below.
 The registry is matched by host: a bare published-sandbox reference uses the
 `run.registry` default (or the Lens hub), while a fully-qualified
 `lns run ghcr.io/org/app` always targets that registry and uses its stored login if present. Credentials live in
-a per-user file (`~/.lns-registry-auth.json`, `0600`; override with
-`LNS_REGISTRY_AUTH_PATH`), separate from any shareable policy.
+a per-user file (`~/.lns/registry-auth.json`, `0600`), separate from any
+shareable policy.
 
 ## `lns audit`
 
@@ -355,7 +355,7 @@ refuse when one of them is a `deny`. See [Policy and approvals](policy.md).
 ## `lns connector`
 
 Manage the credential-connector catalog — the services whose credentials reach a
-workload. The catalog is machine-global (`~/.lns-connectors.yaml`). A connector
+workload. The catalog is machine-global (`~/.lns/connectors.yaml`). A connector
 declared in a sandbox definition's `spec.connectors` seeds its placeholder env
 var but is only offered — the workload is prompted on first use, never armed
 automatically. Connecting one records the connection for that project on this
@@ -387,7 +387,7 @@ lns connector revoke <ID> [--policy <PATH>]
 `token_header`, `basic_x_access_token`, or `api_key_header` (which takes the header
 name as a third segment: `api_key_header:DOMAIN:HEADER`). Value decisions for a
 connected connector are made interactively in the approval window; grants are
-recorded per project and workload in `~/.lns-workload-grants.json`. See
+recorded per project and workload in `~/.lns/workload-grants.json`. See
 [Credentials](credentials.md) and [Connectors](connectors.md).
 
 ## `lns config`
@@ -420,6 +420,6 @@ variables, volumes, and ports are properties of a sandbox, not persistent config
 set them per run (`-e`, `-v`, `-p`) or in the sandbox definition's `spec`.
 
 Values are validated when stored, with the same parsers the run flags use.
-Defaults live in a per-user file — `~/Library/Application Support/lns/config.yaml`
-on macOS, `~/.config/lns/config.yaml` on Linux; override with `LNS_CONFIG_PATH`.
-A per-run flag always wins.
+Defaults live in a per-user file, `~/.lns/config.yaml`, beside everything else
+`lns` keeps for you. Set `LNS_HOME` to move that directory. A per-run flag always
+wins.

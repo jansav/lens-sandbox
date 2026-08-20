@@ -1,4 +1,4 @@
-//! Whether a pulled sandbox may read one of this machine's files lives in `~/.lns-host-path-decisions.json` — a `hostPath` makes what a document mounts depend on the machine running it, which is a risk one developer accepts on one computer, not a rule a directory keeps.
+//! Whether a pulled sandbox may read one of this machine's files lives in `~/.lns/host-path-decisions.json` — a `hostPath` makes what a document mounts depend on the machine running it, which is a risk one developer accepts on one computer, not a rule a directory keeps.
 
 use std::path::PathBuf;
 
@@ -6,8 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::decision_store::{DecisionFile, DecisionStore, JsonDecisionStore, default_path};
 
-const OVERRIDE_ENV: &str = "LNS_HOST_PATH_DECISIONS_PATH";
-const FILENAME: &str = ".lns-host-path-decisions.json";
+const FILENAME: &str = "host-path-decisions.json";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -38,7 +37,7 @@ pub fn repository_of(reference: &str) -> &str {
 }
 
 pub fn default_host_path_decisions_path() -> PathBuf {
-    default_path(OVERRIDE_ENV, FILENAME)
+    default_path(FILENAME)
 }
 
 #[cfg(test)]
@@ -120,13 +119,13 @@ mod tests {
 
     #[test]
     #[serial_test::serial(env)]
-    fn the_decisions_file_is_a_home_dotfile_of_its_own() {
+    fn the_decisions_file_is_a_file_of_its_own_inside_the_lns_home() {
         use crate::test_env::EnvVarGuard;
-        let _g1 = EnvVarGuard::unset(OVERRIDE_ENV);
+        let _g1 = EnvVarGuard::unset("LNS_HOME");
         let _g2 = EnvVarGuard::set("HOME", "/home/dev");
         assert_eq!(
             default_host_path_decisions_path(),
-            PathBuf::from("/home/dev/.lns-host-path-decisions.json"),
+            PathBuf::from("/home/dev/.lns/host-path-decisions.json"),
             "host-path answers must not share a file with the host-bind keep/drop answers"
         );
     }

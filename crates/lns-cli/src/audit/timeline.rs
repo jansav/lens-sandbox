@@ -11,8 +11,8 @@ use crate::log;
 use crate::output::render_table;
 
 pub(super) fn run(args: &AuditArgs, out: &mut dyn Write) -> Result<i32> {
-    let runs_root = lns_ipc::audit_runs_root().context("locating the audit runs root")?;
-    let ledger_path = lns_ipc::connection_ledger().context("locating the connection ledger")?;
+    let runs_root = lns_ipc::audit_runs_root();
+    let ledger_path = lns_ipc::connection_ledger();
 
     let scope = match &args.sandbox {
         Some(sandbox) => match resolve_scope(sandbox, &runs_root, &ledger_path)? {

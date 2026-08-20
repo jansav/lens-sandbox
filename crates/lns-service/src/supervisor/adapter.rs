@@ -68,7 +68,7 @@ pub(super) async fn ensure_with(
         return Ok(p);
     }
 
-    let cache = crate::cache::root()?.join("supervisor");
+    let cache = crate::cache::root().join("supervisor");
 
     let Some(bytes) = embedded else {
         bail!(
@@ -221,7 +221,7 @@ fn sweep_once(weak: &Weak<ApprovalSession>) -> bool {
     true
 }
 
-/// Defaults to empty and warns on store error, so a malformed `~/.lns-credentials.json` doesn't silently wipe the developer's rules at startup.
+/// Defaults to empty and warns on store error, so a malformed `~/.lns/credentials.json` doesn't silently wipe the developer's rules at startup.
 fn load_credentials_or_warn(store: &dyn CredentialStore, path: &Path) -> CredentialStateFile {
     match store.load() {
         Ok(state) => state,
@@ -233,7 +233,7 @@ fn load_credentials_or_warn(store: &dyn CredentialStore, path: &Path) -> Credent
     }
 }
 
-/// Defaults to an empty grant set and warns on load error, so a malformed `~/.lns-workload-grants.json` fails safe: every connector re-offers at first use rather than silently arming.
+/// Defaults to an empty grant set and warns on load error, so a malformed `~/.lns/workload-grants.json` fails safe: every connector re-offers at first use rather than silently arming.
 fn load_grants_or_warn(store: &dyn GrantStore, path: &Path) -> WorkloadGrantFile {
     match store.load() {
         Ok(grants) => grants,
@@ -319,7 +319,7 @@ pub(crate) fn revocations_before_gate(policy_path: &Path) -> HashMap<String, u64
         .collect()
 }
 
-/// Defaults to an empty user catalog and warns on load error, so a malformed `~/.lns-connectors.yaml` doesn't break a run — the bundled catalog still applies.
+/// Defaults to an empty user catalog and warns on load error, so a malformed `~/.lns/connectors.yaml` doesn't break a run — the bundled catalog still applies.
 fn load_user_catalog_or_warn(path: &Path) -> lns_policy::connectors::Catalog {
     match lns_policy::connectors::Catalog::load_or_default(path) {
         Ok(catalog) => catalog,
@@ -1384,7 +1384,7 @@ mod tests {
 
     fn seeded_sidecar(dir: &std::path::Path, policy_path: &Path) -> JsonFileGrantStore {
         Policy::default().save_atomic(policy_path).expect("policy");
-        let store = JsonFileGrantStore::new(dir.join("grants.json"));
+        let store = JsonFileGrantStore::new(dir.join(".lns/workload-grants.json"));
         store
             .update(&mut |file| {
                 file.revoke_project_connector(&project_key(policy_path), "acme");
@@ -1401,11 +1401,9 @@ mod tests {
     fn revocations_before_gate_reads_only_this_projects_counts() {
         let dir = tempfile::TempDir::new().expect("tempdir");
         let policy_path = dir.path().join("lns-local-mixin.yaml");
+        let _g1 = crate::test_env::EnvVarGuard::set("LNS_HOME", dir.path().join(".lns"));
+        let _g2 = crate::test_env::EnvVarGuard::unset("HOME");
         seeded_sidecar(dir.path(), &policy_path);
-        let _g = crate::test_env::EnvVarGuard::set(
-            "LNS_WORKLOAD_GRANTS_PATH",
-            dir.path().join("grants.json"),
-        );
 
         let counts = revocations_before_gate(&policy_path);
 
@@ -1420,9 +1418,11 @@ mod tests {
     #[serial_test::serial(env)]
     fn revocations_before_gate_reads_nothing_from_an_unreadable_sidecar() {
         let dir = tempfile::TempDir::new().expect("tempdir");
-        let sidecar = dir.path().join("grants.json");
-        std::fs::write(&sidecar, "{ not json").expect("corrupt sidecar");
-        let _g = crate::test_env::EnvVarGuard::set("LNS_WORKLOAD_GRANTS_PATH", &sidecar);
+        let home = dir.path().join(".lns");
+        std::fs::create_dir_all(&home).expect("lns home");
+        std::fs::write(home.join("workload-grants.json"), "{ not json").expect("corrupt sidecar");
+        let _g1 = crate::test_env::EnvVarGuard::set("LNS_HOME", &home);
+        let _g2 = crate::test_env::EnvVarGuard::unset("HOME");
 
         assert!(
             revocations_before_gate(&dir.path().join("lns-local-mixin.yaml")).is_empty(),
@@ -1586,7 +1586,7 @@ mod tests {
     fn load_user_catalog_or_warn_reads_an_existing_user_catalog() {
         use lns_policy::connectors::{AuthKind, Catalog, Connector, CredentialAuth};
         let dir = tempfile::TempDir::new().expect("tempdir");
-        let path = dir.path().join(".lns-connectors.yaml");
+        let path = dir.path().join(".lns/connectors.yaml");
         Catalog {
             connectors: vec![Connector {
                 id: "acme".into(),
@@ -1613,7 +1613,8 @@ mod tests {
     fn load_user_catalog_or_warn_defaults_to_empty_and_warns_on_load_error() {
         init_tracing_capture();
         let dir = tempfile::TempDir::new().expect("tempdir");
-        let path = dir.path().join(".lns-connectors.yaml");
+        let path = dir.path().join(".lns/connectors.yaml");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(&path, "connectors: not-a-list\n").unwrap();
         let catalog = load_user_catalog_or_warn(&path);
         assert!(
@@ -3044,8 +3045,8 @@ mod tests {
     async fn ensure_without_embed_or_override_bails() {
         let cache_root = tempfile::TempDir::new().unwrap();
         let _home = crate::test_env::EnvVarGuard::set("HOME", cache_root.path());
-        let _xdg =
-            crate::test_env::EnvVarGuard::set("XDG_CACHE_HOME", cache_root.path().join("xdg"));
+        let _lns_home =
+            crate::test_env::EnvVarGuard::set("LNS_HOME", cache_root.path().join(".lns"));
 
         let err = ensure_with(|_| None, None)
             .await
@@ -3070,7 +3071,7 @@ mod tests {
         // SAFETY: env mutation is serialized via #[serial(env)].
         unsafe {
             std::env::set_var("HOME", cache_root.path());
-            std::env::set_var("XDG_CACHE_HOME", cache_root.path().join("xdg"));
+            std::env::set_var("LNS_HOME", cache_root.path().join(".lns"));
         }
         let bytes = b"\x7fELF fake embedded supervisor".as_slice();
         // env_get returns None so the override is absent and the embedded
@@ -3080,7 +3081,7 @@ mod tests {
         // SAFETY: env mutation is serialized via #[serial(env)].
         unsafe {
             std::env::remove_var("HOME");
-            std::env::remove_var("XDG_CACHE_HOME");
+            std::env::remove_var("LNS_HOME");
         }
 
         let first = first.expect("embedded install succeeds");

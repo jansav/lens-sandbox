@@ -68,8 +68,8 @@ impl ConnectorSignIn for FakeSignIn {
 
 async fn run_connector(world: &mut BehaviourWorld, tail: &[&str]) {
     let dir = cwd(world);
-    let catalog = dir.join(".lns-connectors.yaml");
-    let grants = dir.join(".lns-workload-grants.json");
+    let catalog = dir.join(".lns/connectors.yaml");
+    let grants = dir.join(".lns/workload-grants.json");
     let signin = FakeSignIn {
         outcome: world
             .signin_outcome
@@ -103,7 +103,7 @@ async fn run_connector(world: &mut BehaviourWorld, tail: &[&str]) {
 
 fn append_connector(dir: &std::path::Path, connector: lns_policy::connectors::Connector) {
     use lns_policy::connectors::Catalog;
-    let path = dir.join(".lns-connectors.yaml");
+    let path = dir.join(".lns/connectors.yaml");
     let mut catalog = Catalog::load_or_default(&path).unwrap();
     catalog.connectors.push(connector);
     catalog.save_atomic(&path).unwrap();
@@ -328,7 +328,7 @@ fn recorded(world: &mut BehaviourWorld, id: String) {
 fn connected_for(world: &mut BehaviourWorld) -> Vec<String> {
     use lns_policy::grants::GrantStore as _;
     let policy = policy_file(world);
-    lns_policy::grants::JsonFileGrantStore::new(cwd(world).join(".lns-workload-grants.json"))
+    lns_policy::grants::JsonFileGrantStore::new(cwd(world).join(".lns/workload-grants.json"))
         .load()
         .expect("the sidecar reads back")
         .connected_in(&lns_policy::grants::project_key(&policy))

@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use serde_json::Value;
 use std::os::fd::RawFd;
 use std::path::PathBuf;
@@ -60,8 +60,8 @@ impl AuditBudget {
     }
 }
 
-fn audit_path(run_id: &str) -> Result<PathBuf> {
-    Ok(lns_ipc::audit_log_for_run(run_id)?)
+fn audit_path(run_id: &str) -> PathBuf {
+    lns_ipc::audit_log_for_run(run_id)
 }
 
 pub struct Relay {
@@ -88,7 +88,7 @@ pub fn spawn(
 ) -> Result<Relay> {
     let token = generate_token();
     let url = format!("vsock://host:{VSOCK_PORT}/v1/sandbox");
-    let audit = audit_path(run_id).context("resolving audit log path")?;
+    let audit = audit_path(run_id);
     let (fd_tx, fd_rx) = mpsc::unbounded_channel::<RawFd>();
 
     let token_clone = token.clone();
@@ -377,8 +377,11 @@ mod tests {
         }
     }
 
-    fn home_for(temp: &tempfile::TempDir) -> EnvVarGuard {
-        EnvVarGuard::set("HOME", temp.path())
+    fn home_for(temp: &tempfile::TempDir) -> (EnvVarGuard, EnvVarGuard) {
+        (
+            EnvVarGuard::set("HOME", temp.path()),
+            EnvVarGuard::set("LNS_HOME", temp.path().join(".lns")),
+        )
     }
 
     fn session_with_dummy_sink() -> Arc<ApprovalSession> {
@@ -668,7 +671,7 @@ mod tests {
     async fn audit_path_resolves_the_jsonl_path_without_creating_the_run_dir() {
         let temp = tempdir().unwrap();
         let _home = home_for(&temp);
-        let path = audit_path("aa42").expect("audit_path");
+        let path = audit_path("aa42");
         assert!(path.ends_with("runs/aa42/audit.jsonl"));
         assert!(
             !path.parent().unwrap().exists(),

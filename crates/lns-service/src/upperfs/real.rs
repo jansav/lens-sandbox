@@ -3,7 +3,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use super::{provision_image, write_ext4};
 
 pub async fn provision(run_id: &str, size_bytes: u64) -> anyhow::Result<std::path::PathBuf> {
-    let root = crate::cache::root()?;
+    let root = crate::cache::root();
     let run_id = run_id.to_string();
     let uuid: [u8; 16] = rand::random();
     let mkfs_time = SystemTime::now()

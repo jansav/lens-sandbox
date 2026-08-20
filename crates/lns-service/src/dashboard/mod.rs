@@ -147,14 +147,8 @@ fn dashboard_visuals() -> egui::Visuals {
 }
 
 pub fn load(state: &mut DashboardState) {
-    let runs = match lns_ipc::audit_runs_root() {
-        Ok(path) => path,
-        Err(e) => return set_error(state, e),
-    };
-    let ledger = match lns_ipc::connection_ledger() {
-        Ok(path) => path,
-        Err(e) => return set_error(state, e),
-    };
+    let runs = lns_ipc::audit_runs_root();
+    let ledger = lns_ipc::connection_ledger();
     match lns_audit::collect_timeline(&runs, &ledger, None) {
         Ok(timeline) => {
             state.sandboxes = sandboxes::merge_sandboxes(&active_sandboxes(), &timeline.rows);
@@ -203,10 +197,6 @@ pub fn viewport_builder() -> egui::ViewportBuilder {
         .with_resizable(true)
         .with_inner_size([960.0, 640.0])
         .with_min_inner_size([640.0, 400.0])
-}
-
-fn set_error(state: &mut DashboardState, e: impl std::fmt::Display) {
-    state.last_error = Some(e.to_string());
 }
 
 pub fn render(ui: &mut egui::Ui, state: &mut DashboardState) -> DashboardAction {

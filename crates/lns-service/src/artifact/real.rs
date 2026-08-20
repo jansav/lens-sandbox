@@ -302,7 +302,7 @@ async fn materialize_filesets(
     resolved: &ResolvedSandbox,
 ) -> Result<crate::artifact::fileset::MaterializedFilesets> {
     let content_store =
-        crate::content_store::ContentStore::new(crate::cache::root()?.join("content"));
+        crate::content_store::ContentStore::new(crate::cache::root().join("content"));
     let mut out = crate::artifact::fileset::MaterializedFilesets::default();
     for fileset in &resolved.packed_filesets {
         let layer = pull_packed_layer(&fileset.source, &content_store)

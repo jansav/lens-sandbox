@@ -12,7 +12,7 @@ use anyhow::{Context, Result, bail};
 pub const VOLUME_DEFAULT_SIZE_BYTES: u64 = crate::upperfs::DEFAULT_SIZE_BYTES;
 
 pub fn store_root() -> Result<PathBuf> {
-    Ok(crate::cache::root()?.join("volumes"))
+    Ok(crate::cache::root().join("volumes"))
 }
 
 pub fn validate_name(name: &str) -> Result<()> {
@@ -849,7 +849,7 @@ mod tests {
     async fn store_root_lives_under_the_cache_root() {
         let d = tempfile::tempdir().unwrap();
         let _h = crate::test_env::EnvVarGuard::set("HOME", d.path());
-        let _x = crate::test_env::EnvVarGuard::set("XDG_CACHE_HOME", d.path().join("cache"));
+        let _x = crate::test_env::EnvVarGuard::set("LNS_HOME", d.path().join(".lns"));
         assert!(store_root().unwrap().ends_with("volumes"));
     }
 
@@ -858,7 +858,7 @@ mod tests {
     async fn acquire_production_wrapper_creates_under_store_and_releases_on_drop() {
         let d = tempfile::tempdir().unwrap();
         let _h = crate::test_env::EnvVarGuard::set("HOME", d.path());
-        let _x = crate::test_env::EnvVarGuard::set("XDG_CACHE_HOME", d.path().join("cache"));
+        let _x = crate::test_env::EnvVarGuard::set("LNS_HOME", d.path().join(".lns"));
         let acq = acquire("cov-acquire", "aa01").await.unwrap();
         assert!(acq.image_path.ends_with("cov-acquire.img"));
         drop(acq);
@@ -874,7 +874,7 @@ mod tests {
     async fn resolve_production_wrapper_maps_mounts_to_attachments() {
         let d = tempfile::tempdir().unwrap();
         let _h = crate::test_env::EnvVarGuard::set("HOME", d.path());
-        let _x = crate::test_env::EnvVarGuard::set("XDG_CACHE_HOME", d.path().join("cache"));
+        let _x = crate::test_env::EnvVarGuard::set("LNS_HOME", d.path().join(".lns"));
         let mounts = [lns_ipc::VolumeMount {
             name: "cov-resolve".to_string(),
             target: "/data".to_string(),
@@ -1228,7 +1228,7 @@ mod tests {
     async fn lifecycle_production_wrappers_round_trip_under_the_cache_root() {
         let d = tempfile::tempdir().unwrap();
         let _h = crate::test_env::EnvVarGuard::set("HOME", d.path());
-        let _x = crate::test_env::EnvVarGuard::set("XDG_CACHE_HOME", d.path().join("cache"));
+        let _x = crate::test_env::EnvVarGuard::set("LNS_HOME", d.path().join(".lns"));
         let info = create("cov-lifecycle").await.unwrap();
         assert_eq!(info.name, "cov-lifecycle");
         assert!(

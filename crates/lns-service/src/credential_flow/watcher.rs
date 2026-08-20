@@ -21,6 +21,8 @@ impl CredentialWatcher {
             .filter(|p| !p.as_os_str().is_empty())
             .map(Path::to_path_buf)
             .unwrap_or_else(|| PathBuf::from("."));
+        // A machine with no bound value has no lns home yet, and watching a missing directory fails.
+        std::fs::create_dir_all(&parent)?;
 
         let mut watcher = notify::recommended_watcher(event_handler(path, session))?;
         watcher.watch(&parent, RecursiveMode::NonRecursive)?;
@@ -198,6 +200,21 @@ mod tests {
             .save(&CredentialStateFile::new())
             .unwrap();
         let _w = CredentialWatcher::spawn(path, make_session()).unwrap();
+    }
+
+    #[test]
+    fn spawn_creates_the_lns_home_a_machine_with_no_bound_value_does_not_have_yet() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let home = dir.path().join(".lns");
+        let path = home.join("credentials.json");
+        assert!(!home.exists(), "the directory must be absent to be created");
+
+        let _w = CredentialWatcher::spawn(path, make_session()).unwrap();
+
+        assert!(
+            home.is_dir(),
+            "the service must start on a machine that has bound no credential yet, so it creates the directory it watches rather than refusing"
+        );
     }
 
     #[test]

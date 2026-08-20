@@ -736,7 +736,7 @@ mod tests {
     }
 
     fn catalog_at(dir: &Path) -> std::path::PathBuf {
-        dir.join(".lns-connectors.yaml")
+        dir.join(".lns/connectors.yaml")
     }
 
     fn load(path: &Path) -> Catalog {
@@ -968,6 +968,7 @@ mod tests {
     fn list_surfaces_a_malformed_catalog_as_an_error() {
         let dir = TempDir::new().unwrap();
         let path = catalog_at(dir.path());
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(&path, "connectors: not-a-list\n").unwrap();
         let err = list(&list_args(), &path, &mut Vec::new()).unwrap_err();
         assert!(format!("{err:#}").contains("loading"));

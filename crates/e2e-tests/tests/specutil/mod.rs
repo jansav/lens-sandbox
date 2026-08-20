@@ -233,11 +233,7 @@ pub fn audit_runs_dir(home: &Path) -> PathBuf {
 }
 
 pub fn data_lns_dir(home: &Path) -> PathBuf {
-    if cfg!(target_os = "macos") {
-        home.join("Library/Application Support/lns")
-    } else {
-        home.join(".local/share/lns")
-    }
+    home.join(".lns").join("data")
 }
 
 pub fn assert_eq_int(expected: i32, actual: i32, label: &str) -> Result<(), String> {

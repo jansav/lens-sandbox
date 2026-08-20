@@ -32,7 +32,7 @@ pub fn run<'a>(matches: &'a clap::ArgMatches, ctx: RunCtx<'a>) -> RunFuture<'a> 
 }
 
 fn configured_registry() -> Result<Option<String>> {
-    let path = crate::config::default_config_path()?;
+    let path = crate::config::default_config_path();
     Ok(crate::config::load_run_defaults(&path)?.registry)
 }
 

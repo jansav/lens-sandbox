@@ -1,4 +1,3 @@
-use anyhow::Context;
 use tokio::sync::Mutex;
 
 use super::provisioner::real::MiseProvisioner;
@@ -41,7 +40,7 @@ pub async fn ensure_for_run(
     target: &ProvisionTarget,
     disclose: &(dyn Fn(&super::ProvisionOutcome) + Send + Sync),
 ) -> Result<EnsuredTools, ProvisionError> {
-    let cache_dir = cache_dir()?;
+    let cache_dir = cache_dir();
     let tools_root = cache_dir.join("tools");
     let records = super::record::RealRecordStore::new(&tools_root);
     let cache = super::cache::RealToolCache::new(
@@ -112,7 +111,7 @@ pub async fn pre_provision_for_pull(
             .map_err(|e| ProvisionError::Engine(format!("reading the base image: {e:#}")))?,
     };
     super::registry::refuse_libc_unsupported(&requests, &target, &sandbox.base_image)?;
-    let content_store = crate::content_store::ContentStore::new(cache_dir()?.join("content"));
+    let content_store = crate::content_store::ContentStore::new(cache_dir().join("content"));
     let scratch_id = format!(
         "pull-{}",
         sandbox
@@ -155,10 +154,8 @@ impl Drop for ScratchGuard {
     }
 }
 
-fn cache_dir() -> Result<std::path::PathBuf, ProvisionError> {
+fn cache_dir() -> std::path::PathBuf {
     crate::cache::root()
-        .context("resolving the cache root")
-        .map_err(|e| ProvisionError::Engine(format!("{e:#}")))
 }
 
 fn now_unix_secs() -> u64 {
