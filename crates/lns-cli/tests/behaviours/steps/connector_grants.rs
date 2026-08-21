@@ -18,7 +18,7 @@ fn store(world: &mut BehaviourWorld) -> JsonFileGrantStore {
 
 /// Derived the same way the commands derive it, so a seeded grant keys identically to one a real run would have left.
 fn this_project(world: &mut BehaviourWorld) -> String {
-    project_key(&cwd(world).join("lns-local-mixin.yaml"))
+    project_key(&cwd(world))
 }
 
 fn workload_of(key: &str) -> WorkloadIdentity {
@@ -45,6 +45,11 @@ fn output(world: &BehaviourWorld) -> &str {
         .as_ref()
         .expect("a run must have happened")
         .output
+}
+
+#[given("this project has a decisions file")]
+fn project_has_a_decisions_file(world: &mut BehaviourWorld) {
+    std::fs::write(cwd(world).join("lns-local-mixin.yaml"), "").expect("write the decisions file");
 }
 
 #[given(regex = r#"^this project connects "([^"]+)"$"#)]
@@ -92,12 +97,38 @@ fn grant_sidecar_unwritable(world: &mut BehaviourWorld) {
     std::fs::create_dir(&lock).expect("occupy the lock path");
 }
 
+#[then("the command fails naming the path as not a project directory")]
+fn fails_not_a_project_dir(world: &mut BehaviourWorld) {
+    let run = world.result.as_ref().expect("a run must have happened");
+    assert_eq!(run.exit_code, 1, "got: {}", run.output);
+    assert!(
+        run.output.contains("not a project directory"),
+        "a developer reaching for the old --policy habit must be told which path is wrong, got: {}",
+        run.output
+    );
+}
+
+#[then("no connection is keyed by the decisions file")]
+fn no_connection_keyed_by_the_decisions_file(world: &mut BehaviourWorld) {
+    let file = loaded(world);
+    let by_file: Vec<&str> = file
+        .connected
+        .iter()
+        .map(|c| c.project.as_str())
+        .filter(|p| p.ends_with("lns-local-mixin.yaml"))
+        .collect();
+    assert!(
+        by_file.is_empty(),
+        "keying a connection by the decisions file is the orphaned key this change exists to stop writing, got: {by_file:?}"
+    );
+}
+
 #[then(regex = r#"^this project still connects "([^"]+)"$"#)]
 fn project_still_connects(world: &mut BehaviourWorld, id: String) {
     let connected = JsonFileGrantStore::new(cwd(world).join(".lns/workload-grants.json"))
         .load()
         .expect("the sidecar reads back")
-        .connected_in(&project_key(&cwd(world).join("lns-local-mixin.yaml")));
+        .connected_in(&this_project(world));
     assert!(
         connected.contains(&id),
         "the connection and the grants under it are one write now, so a disconnect that could not land leaves {id} connected for a retry, got: {connected:?}"

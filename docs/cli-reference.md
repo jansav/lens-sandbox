@@ -367,10 +367,10 @@ value.
 lns connector add <ID> --env-var <VAR> --inject <KIND:DOMAIN>... [--route <HOST>]... [--placeholder <P>]
 lns connector list
 lns connector remove <ID>
-lns connector connect <ID> [--policy <PATH>]
-lns connector disconnect <ID> [--policy <PATH>]
-lns connector grants [--policy <PATH>] [--all]
-lns connector revoke <ID> [--policy <PATH>]
+lns connector connect <ID> [--project <PATH>]
+lns connector disconnect <ID> [--project <PATH>]
+lns connector grants [--project <PATH>] [--all]
+lns connector revoke <ID> [--project <PATH>]
 ```
 
 | Subcommand   | Meaning                                                                       |
@@ -387,7 +387,8 @@ lns connector revoke <ID> [--policy <PATH>]
 `token_header`, `basic_x_access_token`, or `api_key_header` (which takes the header
 name as a third segment: `api_key_header:DOMAIN:HEADER`). Value decisions for a
 connected connector are made interactively in the approval window; grants are
-recorded per project and workload in `~/.lns/workload-grants.json`. See
+recorded per project and workload in `~/.lns/workload-grants.json`, keyed by the
+project directory — `--project <PATH>` acts on another one. See
 [Credentials](credentials.md) and [Connectors](connectors.md).
 
 ## `lns config`

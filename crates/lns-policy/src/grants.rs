@@ -328,11 +328,21 @@ pub trait GrantStore: Send + Sync {
     }
 }
 
-/// The grant-store project key for a policy file: its canonical path, so the same directory keys identically no matter how a run addressed it, falling back to the raw path when canonicalization can't resolve it.
-pub fn project_key(policy_path: &Path) -> String {
-    policy_path
+/// The project a decisions file belongs to, so a caller holding only that path keys identically to one holding the directory.
+pub fn project_key_of_decisions_file(decisions_path: &Path) -> String {
+    project_key(
+        decisions_path
+            .parent()
+            .filter(|p| !p.as_os_str().is_empty())
+            .unwrap_or(decisions_path),
+    )
+}
+
+/// Keyed by the project directory, never a file inside it: consenting to a connector is per project, and `lns connector connect` names a directory and no workload.
+pub fn project_key(project_dir: &Path) -> String {
+    project_dir
         .canonicalize()
-        .unwrap_or_else(|_| policy_path.to_path_buf())
+        .unwrap_or_else(|_| project_dir.to_path_buf())
         .to_string_lossy()
         .into_owned()
 }
@@ -948,20 +958,42 @@ mod tests {
     }
 
     #[test]
-    fn project_key_canonicalizes_an_existing_policy_path() {
+    fn project_key_canonicalizes_the_project_directory() {
         let dir = tempfile::TempDir::new().unwrap();
-        let path = dir.path().join("lns-local-mixin.yaml");
-        fs::write(&path, "").unwrap();
         assert_eq!(
-            project_key(&path),
-            fs::canonicalize(&path).unwrap().to_string_lossy()
+            project_key(dir.path()),
+            fs::canonicalize(dir.path()).unwrap().to_string_lossy()
+        );
+    }
+
+    #[test]
+    fn project_key_of_a_directory_is_not_the_key_of_a_file_inside_it() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let policy = dir.path().join("lns-local-mixin.yaml");
+        fs::write(&policy, "").unwrap();
+        assert_ne!(
+            project_key(dir.path()),
+            project_key(&policy),
+            "a caller still passing the decisions file would silently key every grant somewhere else, and the compiler cannot catch it"
+        );
+    }
+
+    #[test]
+    fn a_decisions_file_keys_the_directory_that_holds_it() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let policy = dir.path().join("lns-local-mixin.yaml");
+        fs::write(&policy, "").unwrap();
+        assert_eq!(
+            project_key_of_decisions_file(&policy),
+            project_key(dir.path()),
+            "the service holds only the decisions path and the CLI holds only the directory, so both must land on one key"
         );
     }
 
     #[test]
     fn project_key_falls_back_to_the_raw_path_when_it_cannot_be_canonicalized() {
-        let path = Path::new("/no/such/dir/lns-local-mixin.yaml");
-        assert_eq!(project_key(path), "/no/such/dir/lns-local-mixin.yaml");
+        let path = Path::new("/no/such/dir");
+        assert_eq!(project_key(path), "/no/such/dir");
     }
 
     #[test]

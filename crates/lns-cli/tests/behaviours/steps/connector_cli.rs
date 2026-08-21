@@ -238,6 +238,8 @@ fn given_connector_in_catalog(world: &mut BehaviourWorld, id: String) {
 
 #[when(regex = r#"^the user runs connector command "([^"]+)"$"#)]
 async fn run_connector_command(world: &mut BehaviourWorld, command: String) {
+    let dir = cwd(world).to_string_lossy().into_owned();
+    let command = command.replace("<this project>", &dir);
     let parts: Vec<&str> = command.split_whitespace().collect();
     run_connector(world, &parts).await;
 }
@@ -327,11 +329,11 @@ fn recorded(world: &mut BehaviourWorld, id: String) {
 
 fn connected_for(world: &mut BehaviourWorld) -> Vec<String> {
     use lns_policy::grants::GrantStore as _;
-    let policy = policy_file(world);
-    lns_policy::grants::JsonFileGrantStore::new(cwd(world).join(".lns/workload-grants.json"))
+    let dir = cwd(world);
+    lns_policy::grants::JsonFileGrantStore::new(dir.join(".lns/workload-grants.json"))
         .load()
         .expect("the sidecar reads back")
-        .connected_in(&lns_policy::grants::project_key(&policy))
+        .connected_in(&lns_policy::grants::project_key(&dir))
 }
 
 #[then("lns-local-mixin.yaml carries no token material")]

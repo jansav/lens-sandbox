@@ -9,7 +9,6 @@ use lns_policy::connectors::{
 use lns_policy::grants::{GrantRecord, GrantStore, GrantVerdict, JsonFileGrantStore, project_key};
 
 use crate::command::{CommandSpec, subcommand};
-use crate::run::summary::policy_path;
 
 mod real;
 mod sign_in;
@@ -82,9 +81,9 @@ pub struct ConnectArgs {
     pub id: String,
     #[arg(
         long,
-        help = "Policy file path; defaults to `lns-local-mixin.yaml` in the current directory."
+        help = "Project directory to act on; defaults to the current directory."
     )]
-    pub policy: Option<PathBuf>,
+    pub project: Option<PathBuf>,
 }
 
 #[derive(clap::Args)]
@@ -93,9 +92,9 @@ pub struct DisconnectArgs {
     pub id: String,
     #[arg(
         long,
-        help = "Policy file path; defaults to `lns-local-mixin.yaml` in the current directory."
+        help = "Project directory to act on; defaults to the current directory."
     )]
-    pub policy: Option<PathBuf>,
+    pub project: Option<PathBuf>,
 }
 
 #[derive(clap::Args)]
@@ -108,9 +107,9 @@ pub struct ConnectorListArgs {
 pub struct GrantsArgs {
     #[arg(
         long,
-        help = "Policy file path whose project the grants are listed for; defaults to `lns-local-mixin.yaml` in the current directory."
+        help = "Project directory whose grants are listed; defaults to the current directory."
     )]
-    pub policy: Option<PathBuf>,
+    pub project: Option<PathBuf>,
     #[arg(
         long,
         help = "List grants for every project on this machine, not just this one."
@@ -126,9 +125,9 @@ pub struct RevokeArgs {
     pub id: String,
     #[arg(
         long,
-        help = "Policy file path whose project the grant is revoked from; defaults to `lns-local-mixin.yaml` in the current directory."
+        help = "Project directory the grant is revoked from; defaults to the current directory."
     )]
-    pub policy: Option<PathBuf>,
+    pub project: Option<PathBuf>,
 }
 
 fn parse_injection(s: &str) -> Result<lns_policy::providers::InjectionDef, String> {
@@ -178,6 +177,25 @@ fn parse_injection(s: &str) -> Result<lns_policy::providers::InjectionDef, Strin
         domain: domain.to_string(),
         header,
     })
+}
+
+/// Anything that is not an existing directory is refused rather than keyed, so the old `--policy` habit cannot write a connection under a decisions file.
+fn project_dir(explicit: Option<&Path>, cwd: &Path) -> Result<PathBuf> {
+    let Some(p) = explicit else {
+        return Ok(cwd.to_path_buf());
+    };
+    let resolved = if p.is_absolute() {
+        p.to_path_buf()
+    } else {
+        cwd.join(p)
+    };
+    if !resolved.is_dir() {
+        bail!(
+            "{} is not a project directory; --project names the directory you work in, not the decisions file inside it",
+            resolved.display()
+        );
+    }
+    Ok(resolved)
 }
 
 pub fn augment(app: clap::Command) -> clap::Command {
@@ -375,6 +393,8 @@ pub async fn connect(
     let Some(integ) = effective.iter().find(|i| i.id == args.id) else {
         bail!("unknown connector {:?}; see `lns connector list`", args.id);
     };
+    // Resolved before the sign-in: a mistyped --project must not cost the developer a completed browser device flow first.
+    let project = project_key(&project_dir(args.project.as_deref(), cwd)?);
     // An oauth connector authenticates by an interactive sign-in; a credential connector binds its per-machine value decision through the approval-window card. Either way the id is recorded only on success.
     let closing = if integ.auth_kind == AuthKind::Oauth {
         match signin.sign_in(&args.id, writer).await? {
@@ -402,14 +422,10 @@ pub async fn connect(
             BindOutcome::Completed(decision) => bind_message(&args.id, decision),
         }
     };
-    let path = policy_path(
-        args.policy.as_deref(),
-        crate::run::summary::DecisionsSite::one_directory(cwd),
-    );
-    connect_project(grants_path, &project_key(&path), &args.id)?;
+    connect_project(grants_path, &project, &args.id)?;
     writeln!(writer, "{closing}")?;
     // Binding the value cannot lift a workload's decline, so say what will: otherwise the connect reports success and the workload goes on being refused with nothing on screen explaining it.
-    match standing_declines(grants_path, &project_key(&path), &args.id) {
+    match standing_declines(grants_path, &project, &args.id) {
         0 => {}
         n => writeln!(
             writer,
@@ -451,11 +467,7 @@ pub fn disconnect(
     grants_path: &Path,
     writer: &mut impl Write,
 ) -> Result<i32> {
-    let path = policy_path(
-        args.policy.as_deref(),
-        crate::run::summary::DecisionsSite::one_directory(cwd),
-    );
-    let project = project_key(&path);
+    let project = project_key(&project_dir(args.project.as_deref(), cwd)?);
     let cleared = disconnect_project(grants_path, &project, &args.id)?
         .ok_or_else(|| anyhow::anyhow!("{:?} is not connected in {project}", args.id))?;
     let grants_note = match cleared {
@@ -513,10 +525,7 @@ fn grants(
     let file = store
         .load()
         .with_context(|| format!("reading grants from {}", grants_path.display()))?;
-    let project = project_key(&policy_path(
-        args.policy.as_deref(),
-        crate::run::summary::DecisionsSite::one_directory(cwd),
-    ));
+    let project = project_key(&project_dir(args.project.as_deref(), cwd)?);
     let rows: Vec<&GrantRecord> = if args.all {
         file.grants.iter().collect()
     } else {
@@ -582,10 +591,7 @@ fn revoke(
     grants_path: &Path,
     writer: &mut impl Write,
 ) -> Result<i32> {
-    let project = project_key(&policy_path(
-        args.policy.as_deref(),
-        crate::run::summary::DecisionsSite::one_directory(cwd),
-    ));
+    let project = project_key(&project_dir(args.project.as_deref(), cwd)?);
     let cleared = clear_project_grants(grants_path, &project, &args.id)?;
     if cleared == 0 {
         bail!(
@@ -612,7 +618,7 @@ mod tests {
         JsonFileGrantStore::new(dir.join("grants.json"))
             .load()
             .expect("the sidecar reads back")
-            .connected_in(&project_key(&dir.join("lns-local-mixin.yaml")))
+            .connected_in(&project_key(dir))
     }
 
     #[test]
@@ -1072,7 +1078,7 @@ mod tests {
         connect(
             &ConnectArgs {
                 id: "some-provider".into(),
-                policy: None,
+                project: None,
             },
             dir.path(),
             &catalog,
@@ -1095,7 +1101,7 @@ mod tests {
         let err = connect(
             &ConnectArgs {
                 id: "nope".into(),
-                policy: None,
+                project: None,
             },
             dir.path(),
             &catalog_at(dir.path()),
@@ -1116,7 +1122,7 @@ mod tests {
         connect(
             &ConnectArgs {
                 id: "somesaas".into(),
-                policy: None,
+                project: None,
             },
             dir.path(),
             &catalog,
@@ -1141,7 +1147,7 @@ mod tests {
         let err = connect(
             &ConnectArgs {
                 id: "somesaas".into(),
-                policy: None,
+                project: None,
             },
             dir.path(),
             &catalog,
@@ -1165,7 +1171,7 @@ mod tests {
         connect(
             &ConnectArgs {
                 id: "some-provider".into(),
-                policy: None,
+                project: None,
             },
             dir.path(),
             &catalog_with_some_provider(dir.path()),
@@ -1195,7 +1201,7 @@ mod tests {
         connect(
             &ConnectArgs {
                 id: "some-provider".into(),
-                policy: None,
+                project: None,
             },
             dir.path(),
             &catalog_with_some_provider(dir.path()),
@@ -1217,7 +1223,7 @@ mod tests {
         let err = connect(
             &ConnectArgs {
                 id: "some-provider".into(),
-                policy: None,
+                project: None,
             },
             dir.path(),
             &catalog_with_some_provider(dir.path()),
@@ -1240,7 +1246,7 @@ mod tests {
         let err = connect(
             &ConnectArgs {
                 id: "some-provider".into(),
-                policy: None,
+                project: None,
             },
             dir.path(),
             &catalog_with_some_provider(dir.path()),
@@ -1264,7 +1270,7 @@ mod tests {
         let err = connect(
             &ConnectArgs {
                 id: "somesaas".into(),
-                policy: None,
+                project: None,
             },
             dir.path(),
             &catalog,
@@ -1287,7 +1293,7 @@ mod tests {
         connect(
             &ConnectArgs {
                 id: "some-provider".into(),
-                policy: None,
+                project: None,
             },
             dir.path(),
             &catalog,
@@ -1300,7 +1306,7 @@ mod tests {
         disconnect(
             &DisconnectArgs {
                 id: "some-provider".into(),
-                policy: None,
+                project: None,
             },
             dir.path(),
             &dir.path().join("grants.json"),
@@ -1316,7 +1322,7 @@ mod tests {
         let err = disconnect(
             &DisconnectArgs {
                 id: "some-provider".into(),
-                policy: None,
+                project: None,
             },
             dir.path(),
             &dir.path().join("grants.json"),
@@ -1378,7 +1384,7 @@ mod tests {
         run(
             &ConnectorCommand::Connect(ConnectArgs {
                 id: "some-provider".into(),
-                policy: None,
+                project: None,
             }),
             dir.path(),
             &path,
@@ -1392,7 +1398,7 @@ mod tests {
         run(
             &ConnectorCommand::Disconnect(DisconnectArgs {
                 id: "some-provider".into(),
-                policy: None,
+                project: None,
             }),
             dir.path(),
             &path,

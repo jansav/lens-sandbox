@@ -247,7 +247,10 @@ mod tests {
         let grants = dir.path().join("grants.json");
         let store = lns_policy::grants::JsonFileGrantStore::new(grants.clone());
         let mut file = lns_policy::grants::WorkloadGrantFile::default();
-        file.connect(&lns_policy::grants::project_key(&path), "some-provider");
+        file.connect(
+            &lns_policy::grants::project_key_of_decisions_file(&path),
+            "some-provider",
+        );
         lns_policy::grants::GrantStore::save(&store, &file).unwrap();
 
         let (session, mut rx) = make_session();

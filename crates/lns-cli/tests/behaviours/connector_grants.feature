@@ -28,6 +28,24 @@ Feature: inspecting and forgetting per-workload connector grants
     When the user runs connector command "grants"
     Then the output reports no grants for this project
 
+  Scenario: A grant this project recorded is found by naming this project's directory
+    Given the workload "def:/work/app" was granted "some-provider"
+    When the user runs connector command "grants --project <this project>"
+    Then the listing shows "def:/work/app" holding "allow" for "some-provider"
+
+  Scenario: Naming the decisions file instead of the directory is refused
+    Given this project has a decisions file
+    And a user catalog declares the "some-provider" credential connector
+    And the background service is available to sign in
+    When the user runs connector command "connect some-provider --project <this project>/lns-local-mixin.yaml"
+    Then the command fails naming the path as not a project directory
+    And no connection is keyed by the decisions file
+
+  Scenario: A relative --project roots where you typed it
+    Given the workload "def:/work/app" was granted "some-provider"
+    When the user runs connector command "grants --project ."
+    Then the listing shows "def:/work/app" holding "allow" for "some-provider"
+
   Scenario: Another project's grants are not this project's business
     Given the project "/work/other" granted "some-provider"
     When the user runs connector command "grants"

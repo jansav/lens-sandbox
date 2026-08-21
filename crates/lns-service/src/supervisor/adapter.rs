@@ -33,7 +33,7 @@ use crate::log;
 use crate::relay;
 use lns_policy::grants::{
     GrantStore, JsonFileGrantStore, WorkloadGrantFile, WorkloadIdentity,
-    default_workload_grants_path, project_key,
+    default_workload_grants_path, project_key_of_decisions_file,
 };
 use lns_policy::{FilePolicyStore, Policy, RouteRule};
 
@@ -308,7 +308,7 @@ fn record_boot_sign_in_grants(
 
 /// Each connector's forget count as it stands before a run's boot sign-in gate opens, so a `lns connector disconnect` landing during a browser device flow — minutes, not milliseconds — still wins over the grant that sign-in would earn.
 pub(crate) fn revocations_before_gate(policy_path: &Path) -> HashMap<String, u64> {
-    let project = project_key(policy_path);
+    let project = project_key_of_decisions_file(policy_path);
     JsonFileGrantStore::new(default_workload_grants_path())
         .load()
         .unwrap_or_default()
@@ -656,7 +656,7 @@ fn make_connection_recorder(
 pub(crate) fn reload_with_connections(policy_path: &Path, grants_path: &Path) -> Result<Policy> {
     let mut policy = Policy::load_or_default(policy_path)
         .with_context(|| format!("reloading policy {}", policy_path.display()))?;
-    policy.connectors = connected_in(grants_path, &project_key(policy_path));
+    policy.connectors = connected_in(grants_path, &project_key_of_decisions_file(policy_path));
     Ok(policy)
 }
 
@@ -679,7 +679,10 @@ pub(super) async fn start(
 ) -> Result<SupervisorSession> {
     let sandbox_credentials = consent.credentials;
     let workload = consent.workload;
-    let connected = connected_in(&default_workload_grants_path(), &project_key(policy_path));
+    let connected = connected_in(
+        &default_workload_grants_path(),
+        &project_key_of_decisions_file(policy_path),
+    );
     let (mut policy, own_policy) = running_policies(policy_path, sandbox_policy, connected)?;
     // Applied connectors resolve against the effective catalog (bundled ∪ user) into both wire credentials and allow-routes, captured once at boot so a later edit can't reach an already-forked workload.
     let user_catalog =
@@ -719,7 +722,7 @@ pub(super) async fn start(
     let grants_path = default_workload_grants_path();
     let grant_store: Arc<dyn GrantStore> = Arc::new(JsonFileGrantStore::new(grants_path.clone()));
     let mut grants = load_grants_or_warn(grant_store.as_ref(), &grants_path);
-    let project = project_key(policy_path);
+    let project = project_key_of_decisions_file(policy_path);
     record_boot_sign_in_grants(
         BootSignIns {
             signed_in: &consent.signed_in,
@@ -1387,8 +1390,8 @@ mod tests {
         let store = JsonFileGrantStore::new(dir.join(".lns/workload-grants.json"));
         store
             .update(&mut |file| {
-                file.revoke_project_connector(&project_key(policy_path), "acme");
-                file.revoke_project_connector(&project_key(policy_path), "acme");
+                file.revoke_project_connector(&project_key_of_decisions_file(policy_path), "acme");
+                file.revoke_project_connector(&project_key_of_decisions_file(policy_path), "acme");
                 file.revoke_project_connector("/some/other/project", "acme");
                 true
             })

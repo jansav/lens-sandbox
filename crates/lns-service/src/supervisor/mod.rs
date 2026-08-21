@@ -644,7 +644,8 @@ mod tests {
     #[serial_test::serial(env)]
     async fn start_persists_a_boot_sign_in_grant_to_the_sidecar() {
         use lns_policy::grants::{
-            GrantStore, GrantVerdict, JsonFileGrantStore, WorkloadIdentity, project_key,
+            GrantStore, GrantVerdict, JsonFileGrantStore, WorkloadIdentity,
+            project_key_of_decisions_file,
         };
         let fixture = boot_sign_in_fixture();
         let workload = WorkloadIdentity::definition("/proj");
@@ -654,7 +655,11 @@ mod tests {
         let sidecar = JsonFileGrantStore::new(fixture.dir.path().join(".lns/workload-grants.json"));
         let grants = sidecar.load().expect("sidecar readable");
         let grant = grants
-            .lookup(&project_key(&fixture.policy_path), &workload, "some-oauth")
+            .lookup(
+                &project_key_of_decisions_file(&fixture.policy_path),
+                &workload,
+                "some-oauth",
+            )
             .expect("the boot sign-in must persist a grant so the next run skips the sign-in");
         assert_eq!(grant.verdict, GrantVerdict::Allow);
         assert_eq!(
