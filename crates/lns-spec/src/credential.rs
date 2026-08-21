@@ -122,7 +122,7 @@ pub enum InjectionKind {
     UriPlaceholder,
 }
 
-/// Long enough that a stream cannot carry the marker by accident; every bundled connector's placeholder is more than twice this.
+/// Long enough that a stream cannot carry the marker by accident; every installed connector's placeholder is more than twice this.
 pub const MIN_PLACEHOLDER_LEN: usize = 16;
 
 /// The egress pattern that matches every host, which an injection may never name.

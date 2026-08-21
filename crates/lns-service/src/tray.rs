@@ -1584,7 +1584,7 @@ fn render_credential_card(
             if prompt.is_project_defined {
                 ui.add_space(4.0);
                 ui.label(
-                    RichText::new("Project-defined provider (not built-in)")
+                    RichText::new("Project-defined provider (not yours)")
                         .size(theme::FONT_CAPTION)
                         .strong()
                         .color(window::TEXT_WARN),

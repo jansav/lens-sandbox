@@ -50,11 +50,12 @@ fn wire_provider(integ: &Connector) -> Option<DefProvider> {
     wire_provider_def(integ).map(DefProvider::new)
 }
 
-/// The oauth block usable for a device sign-in: the device flow with a client_id baked in (community builds ship none, so they fall back to the token paste).
+/// The oauth block usable for a device sign-in: the device flow with a client id that resolves to something (a build shipping none, or naming an unset variable, falls back to the token paste).
 fn signin_oauth(integ: &Connector) -> Option<&OauthAuth> {
-    integ.oauth.as_ref().filter(|o| {
-        o.flow == OauthFlow::Device && o.client_id.as_deref().is_some_and(|c| !c.is_empty())
-    })
+    integ
+        .oauth
+        .as_ref()
+        .filter(|o| o.flow == OauthFlow::Device && o.client_id_resolved().is_some())
 }
 
 /// The oauth block usable for a pkce browser sign-in: the pkce flow with an authorization endpoint to redirect through.
@@ -75,7 +76,7 @@ pub fn applied_connector_routes(ids: &[String], catalog: &[Connector]) -> Vec<Ro
         .collect()
 }
 
-/// Resolves the policy's applied connector ids against the effective catalog.
+/// Resolves the policy's applied connector ids against the installed set.
 pub fn resolve_applied_connectors(policy: &Policy, catalog: &[Connector]) -> AppliedConnectors {
     let applied: HashSet<&str> = policy.connectors.iter().map(String::as_str).collect();
 
@@ -1061,6 +1062,19 @@ mod tests {
         let mut i = oauth_connector(id, env_var, domain);
         i.oauth.as_mut().unwrap().client_id = None;
         i
+    }
+
+    #[test]
+    #[serial_test::serial(env)]
+    fn an_unresolved_client_id_reference_withholds_the_device_flow() {
+        let _g = crate::test_env::EnvVarGuard::unset("LNS_TEST_ABSENT_CLIENT_ID");
+        let mut integ = oauth_connector("some-oauth", "SOME_OAUTH_TOKEN", "api.some-oauth.example");
+        integ.oauth.as_mut().unwrap().client_id = Some("${LNS_TEST_ABSENT_CLIENT_ID}".into());
+        let out = resolve_applied_connectors(&policy_applying(&["some-oauth"]), &[integ]);
+        assert!(
+            out.oauth_configs.is_empty(),
+            "a literal ${{VAR}} is not a client id, so the flow is withheld and the token paste is offered instead of a sign-in that fails at the provider"
+        );
     }
 
     #[test]

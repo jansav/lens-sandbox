@@ -987,6 +987,21 @@ mod tests {
     }
 
     #[test]
+    fn a_project_defined_prompt_reaches_the_card_the_user_sees() {
+        let s = WindowState::new();
+        let (tx, _rx) = unbounded_channel();
+        let mut prompt = cred_prompt("c1", "some-provider");
+        prompt.is_project_defined = true;
+
+        s.insert_credential_pending(prompt, false, tx);
+
+        assert!(
+            s.snapshot().pending_credentials[0].is_project_defined,
+            "the warning that the repository chose where this value travels is only worth computing if it survives to the card"
+        );
+    }
+
+    #[test]
     fn insert_credential_pending_dedupes_by_id() {
         let s = WindowState::new();
         let (tx, _rx) = unbounded_channel();

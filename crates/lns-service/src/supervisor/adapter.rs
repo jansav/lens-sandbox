@@ -319,13 +319,15 @@ pub(crate) fn revocations_before_gate(policy_path: &Path) -> HashMap<String, u64
         .collect()
 }
 
-/// Defaults to an empty user catalog and warns on load error, so a malformed `~/.lns/connectors.yaml` doesn't break a run — the bundled catalog still applies.
+/// Defaults to an empty catalog and warns on load error, so a malformed `~/.lns/connectors.yaml` doesn't break a run — but nothing ships inside `lns`, so the run then has no connectors at all.
 fn load_user_catalog_or_warn(path: &Path) -> lns_policy::connectors::Catalog {
     match lns_policy::connectors::Catalog::load_or_default(path) {
         Ok(catalog) => catalog,
         Err(e) => {
             let path_str = path.display();
-            log::warn!("could not load {path_str} ({e}); using the bundled connector catalog only");
+            log::warn!(
+                "could not load {path_str} ({e}); this run has no connectors, so every connected one stops resolving until it parses"
+            );
             lns_policy::connectors::Catalog::default()
         }
     }
@@ -569,12 +571,6 @@ async fn start_credential_subsystem(
             consent.workload.clone(),
             consent.grant_store.clone(),
         )
-        .with_bundled_ids(
-            lns_policy::connectors::bundled_connectors()
-                .iter()
-                .map(|i| i.id.clone())
-                .collect(),
-        )
         .with_connect_emitter(consent.connectable_ids, connect_emitter)
         .with_oauth(
             oauth.configs,
@@ -684,10 +680,10 @@ pub(super) async fn start(
         &project_key_of_decisions_file(policy_path),
     );
     let (mut policy, own_policy) = running_policies(policy_path, sandbox_policy, connected)?;
-    // Applied connectors resolve against the effective catalog (bundled ∪ user) into both wire credentials and allow-routes, captured once at boot so a later edit can't reach an already-forked workload.
+    // Applied connectors resolve against the installed set into both wire credentials and allow-routes, captured once at boot so a later edit can't reach an already-forked workload.
     let user_catalog =
         load_user_catalog_or_warn(&lns_policy::connectors::default_connectors_path());
-    let catalog = lns_policy::connectors::effective_connectors(&user_catalog);
+    let catalog = user_catalog.connectors;
     let applied = resolve_applied_with_credentials(&policy, sandbox_credentials, &catalog);
     // Un-connected catalog connectors resolve as connectable and detect-only, so their use offers a live connect and seeds nothing.
     let connectable = resolve_connectable_with_credentials(&policy, sandbox_credentials, &catalog);
@@ -1614,7 +1610,7 @@ mod tests {
         let catalog = load_user_catalog_or_warn(&path);
         assert!(
             catalog.connectors.is_empty(),
-            "a malformed user catalog must surface as empty so the run still gets the bundled set"
+            "a malformed catalog must surface as empty so the launch continues, even though nothing ships inside lns and the run then has no connectors"
         );
     }
 

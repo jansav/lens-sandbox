@@ -623,7 +623,7 @@ async fn gate_declared_sign_ins(
         &lns_policy::connectors::default_connectors_path(),
     )
     .unwrap_or_default();
-    let catalog = lns_policy::connectors::effective_connectors(&user);
+    let catalog = user.connectors;
     let declared = sign_in_gate_ids(credentials, &catalog);
     if declared.is_empty() {
         return Ok(signed_in);

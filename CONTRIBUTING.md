@@ -27,16 +27,16 @@ make test   # cargo test --workspace --exclude e2e-tests (uninstrumented)
 
 ### Testing OAuth connectors locally
 
-The official OAuth app ids are baked into release binaries from CI and are deliberately absent from the source tree, so a local build ships an empty `clientId` and OAuth connectors fall back to a pasted personal access token — enough to exercise the connect/inject path without any setup.
+No OAuth app id ships anywhere: nothing is baked into a binary, and a connector with no usable `clientId` falls back to a pasted token — enough to exercise the connect/inject path without any setup.
 
-To test the live browser device flow, register your own throwaway GitHub OAuth app and point the build-time var at it before building:
+To test the live browser device flow, register your own throwaway OAuth app, declare a connector for it in `~/.lns/connectors.yaml` with `clientId: "${MY_OAUTH_CLIENT_ID}"`, and export that variable where the service runs:
 
 ```bash
-export LNS_OAUTH_CLIENT_ID_GITHUB=<your-app-id>   # or a gitignored .envrc via direnv
-make dev
+export MY_OAUTH_CLIENT_ID=<your-app-id>   # or a gitignored .envrc via direnv
+lns service stop && lns service start
 ```
 
-The build script re-bakes when this var changes, so a rebuild picks it up.
+Resolution happens when the catalog is read, not at build time, so a service restart picks it up — no rebuild. An unset or unresolved reference withholds the sign-in and offers the token paste instead.
 
 ## The Verification Gate
 

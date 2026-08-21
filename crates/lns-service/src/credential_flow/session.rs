@@ -180,7 +180,6 @@ pub struct CredentialSession {
     policy_emitter: PolicyEmitter,
     timeout: Duration,
     custom_providers: Arc<Vec<DefProvider>>,
-    bundled_ids: HashSet<String>,
     connectable: HashSet<String>,
     armed: Mutex<HashSet<String>>,
     declared_ids: HashSet<String>,
@@ -230,7 +229,6 @@ impl CredentialSession {
             policy_emitter,
             timeout,
             custom_providers: Arc::new(Vec::new()),
-            bundled_ids: HashSet::new(),
             connectable: HashSet::new(),
             armed: Mutex::new(HashSet::new()),
             declared_ids: HashSet::new(),
@@ -329,11 +327,6 @@ impl CredentialSession {
         self
     }
 
-    pub fn with_bundled_ids(mut self, bundled_ids: HashSet<String>) -> Self {
-        self.bundled_ids = bundled_ids;
-        self
-    }
-
     /// The ids consented for this run at launch — the overlay's connected connectors and the definition's credential slots; only these may arm a machine-stored value, and a live connect grants more.
     pub fn with_armed_ids(mut self, armed: HashSet<String>) -> Self {
         self.armed = Mutex::new(armed);
@@ -411,7 +404,7 @@ impl CredentialSession {
             return true;
         }
         match self.provider_disclosure(credential_id) {
-            (Some(env_var), domains, _) => grant.matches_disclosure(&env_var, &domains),
+            (Some(env_var), domains) => grant.matches_disclosure(&env_var, &domains),
             _ => true,
         }
     }
@@ -419,7 +412,7 @@ impl CredentialSession {
     /// This run's accept/decline as a grant record, unless it is an allow the provider discloses no injection to pin it to (a deny, being a standing "no", needs none); an unbound session's record carries empty keys nothing ever reads — run-local memory keys by connector alone.
     fn grant_record_for(&self, credential_id: &str, verdict: GrantVerdict) -> Option<GrantRecord> {
         let (env_var, injection_domains) = match self.provider_disclosure(credential_id) {
-            (Some(env_var), domains, _) => (env_var, domains),
+            (Some(env_var), domains) => (env_var, domains),
             _ if verdict == GrantVerdict::Deny => (String::new(), Vec::new()),
             _ => return None,
         };
@@ -565,8 +558,8 @@ impl CredentialSession {
         } else {
             req.action
         };
-        let (env_var, injection_domains, is_project_defined) =
-            self.provider_disclosure(&req.credential_id);
+        let (env_var, injection_domains) = self.provider_disclosure(&req.credential_id);
+        let is_project_defined = self.is_project_defined(&req.credential_id);
         // Only a value bound in the store counts: a host-detect entry resolves to the very value the card's detected-value offer already spends.
         let bound_value_available = self.has_armed_value(&req.credential_id);
         self.notifier.present(&CredentialPendingPrompt {
@@ -594,16 +587,20 @@ impl CredentialSession {
             )
     }
 
-    fn provider_disclosure(&self, credential_id: &str) -> (Option<String>, Vec<String>, bool) {
+    /// True when the injection contract came from the repository rather than this machine, so a card can say the project chose where the value travels.
+    fn is_project_defined(&self, credential_id: &str) -> bool {
+        self.declared_ids.contains(credential_id)
+    }
+
+    fn provider_disclosure(&self, credential_id: &str) -> (Option<String>, Vec<String>) {
         self.custom_providers
             .iter()
             .find(|p| p.id() == credential_id)
             .map(|p| {
                 let (env_var, domains) = p.disclosure_snapshot();
-                let is_project = !self.bundled_ids.contains(p.id());
-                (Some(env_var), domains, is_project)
+                (Some(env_var), domains)
             })
-            .unwrap_or((None, Vec::new(), false))
+            .unwrap_or((None, Vec::new()))
     }
 
     /// True when `credential_id` is consented for this run, already holds a usable value, and injects into the host named in `action`, so a gate for it is a propagation race the host can safely allow rather than re-prompt. An unconsented id (a declared or connectable connector with a machine-stored value) still prompts, and so does a host the credential does not inject into (a real leak attempt).
@@ -797,8 +794,8 @@ impl CredentialSession {
     ) -> SignInOutcome {
         let display_name = self.display_name_for(credential_id);
         let token_fallback = self.token_fallbacks.get(credential_id).cloned();
-        let (env_var, injection_domains, is_project_defined) =
-            self.provider_disclosure(credential_id);
+        let (env_var, injection_domains) = self.provider_disclosure(credential_id);
+        let is_project_defined = self.is_project_defined(credential_id);
         let challenge = (self.pkce_challenge_gen)();
         let (cancel_tx, cancel_rx) = tokio::sync::oneshot::channel::<crate::oauth::SignInPivot>();
         let card_id = credential_id.to_string();
@@ -862,8 +859,8 @@ impl CredentialSession {
         };
         let display_name = self.display_name_for(credential_id);
         let token_fallback = self.token_fallbacks.get(credential_id).cloned();
-        let (env_var, injection_domains, is_project_defined) =
-            self.provider_disclosure(credential_id);
+        let (env_var, injection_domains) = self.provider_disclosure(credential_id);
+        let is_project_defined = self.is_project_defined(credential_id);
         let (cancel_tx, cancel_rx) = tokio::sync::oneshot::channel::<crate::oauth::SignInPivot>();
         let card_id = credential_id.to_string();
         let present = move |code: &crate::oauth::DeviceCode| {
@@ -1033,7 +1030,7 @@ impl CredentialSession {
     ) -> Option<LedgerEvent> {
         match entry {
             CredentialEntry::Stored { value } if !value.is_empty() => {
-                let (_, domains, _) = self.provider_disclosure(credential_id);
+                let (_, domains) = self.provider_disclosure(credential_id);
                 Some(LedgerEvent::CredentialUse {
                     connector: credential_id.to_string(),
                     auth: AuthKind::Apikey,
@@ -3945,6 +3942,36 @@ mod tests {
                 header: None,
             }],
         })
+    }
+
+    #[test]
+    fn a_card_marks_a_provider_whose_injection_contract_came_from_the_repository() {
+        let (session, notifier, _store, _rx) = fixture();
+        let session = session
+            .with_custom_providers(Arc::new(vec![some_provider()]))
+            .with_declared_ids(HashSet::from(["some-provider".to_string()]));
+
+        session.submit_pending(pending("c1", "some-provider"), Instant::now());
+
+        let presented = notifier.presented.lock().unwrap();
+        assert!(
+            presented[0].is_project_defined,
+            "a declared credential takes its variable, placeholder and destinations from the artifact, so the card must say the project chose where the value travels"
+        );
+    }
+
+    #[test]
+    fn a_card_does_not_mark_a_provider_this_machine_supplied() {
+        let (session, notifier, _store, _rx) = fixture();
+        let session = session.with_custom_providers(Arc::new(vec![some_provider()]));
+
+        session.submit_pending(pending("c1", "some-provider"), Instant::now());
+
+        let presented = notifier.presented.lock().unwrap();
+        assert!(
+            !presented[0].is_project_defined,
+            "a connector on this machine is the user's own choice, so the warning must not fire for it or it stops distinguishing anything"
+        );
     }
 
     fn some_provider() -> DefProvider {

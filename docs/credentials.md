@@ -25,12 +25,9 @@ isn't configured for is not rewritten — the placeholder goes nowhere useful.
 
 Every credential provider is a [connector](connectors.md): a named service that
 bundles its placeholder, environment variable, and per-domain injection with the
-routes it needs. `openai`, `anthropic`, `claude-code-subscription`, `bedrock`,
-`linear`, `telegram`, `gitlab`, and `huggingface` ship in the bundled catalog as
-`credential` connectors; `github` and `google` ship as `oauth` connectors (device
-sign-in) and `openrouter` as an `oauth` connector (pkce browser sign-in).
-Declare your own for an internal API with `lns connector add`
-(see [Connectors](connectors.md)). No definition names a connector: which
+routes it needs. Nothing ships inside `lns`, so your catalog starts empty:
+declare what you need with `lns connector add` (see
+[Connectors](connectors.md)). No definition names a connector: which
 method supplies a credential is decided per machine, so a connector that
 nobody connected seeds nothing and is offered on first use, never armed
 automatically.

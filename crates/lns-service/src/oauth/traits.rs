@@ -20,8 +20,8 @@ pub struct OauthConfig {
 impl From<&OauthAuth> for OauthConfig {
     fn from(o: &OauthAuth) -> Self {
         Self {
-            client_id: o.client_id.clone().unwrap_or_default(),
-            client_secret: o.client_secret.clone().unwrap_or_default(),
+            client_id: o.client_id_resolved().unwrap_or_default(),
+            client_secret: o.client_secret_resolved().unwrap_or_default(),
             scopes: o.scopes.clone(),
             device_authorization_endpoint: o
                 .device_authorization_endpoint

@@ -2,10 +2,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
-use lns_policy::connectors::{
-    AuthKind, Catalog, Connector, ConnectorRoute, CredentialAuth, bundled_connectors,
-    effective_connectors,
-};
+use lns_policy::connectors::{AuthKind, Catalog, Connector, ConnectorRoute, CredentialAuth};
 use lns_policy::grants::{GrantRecord, GrantStore, GrantVerdict, JsonFileGrantStore, project_key};
 
 use crate::command::{CommandSpec, subcommand};
@@ -26,9 +23,9 @@ pub struct ConnectorArgs {
 pub enum ConnectorCommand {
     #[command(about = "Declare a credential connector in your machine-global catalog.")]
     Add(ConnectorAddArgs),
-    #[command(about = "List the bundled and user-declared connectors.")]
+    #[command(about = "List the connectors in your catalog.")]
     List(ConnectorListArgs),
-    #[command(about = "Remove a user-declared connector; bundled ones cannot be removed.")]
+    #[command(about = "Remove a connector from your catalog.")]
     Remove(ConnectorRemoveArgs),
     #[command(
         about = "Bind a connector's per-machine value decision (oauth connectors sign in); records the connection for this project in your per-machine grant record."
@@ -46,7 +43,7 @@ pub enum ConnectorCommand {
 
 #[derive(clap::Args)]
 pub struct ConnectorAddArgs {
-    #[arg(help = "New connector id; must not collide with a bundled or existing user connector.")]
+    #[arg(help = "New connector id; must not collide with one already in your catalog.")]
     pub id: String,
     #[arg(long, help = "Environment variable the placeholder is seeded into.")]
     pub env_var: String,
@@ -239,10 +236,6 @@ fn generate_placeholder(id: &str) -> String {
     format!("lns-placeholder-{id}-0000000000000000000000")
 }
 
-fn is_bundled(id: &str) -> bool {
-    bundled_connectors().iter().any(|i| i.id == id)
-}
-
 fn load_catalog(path: &Path) -> Result<Catalog> {
     Catalog::load_or_default(path).with_context(|| format!("loading {}", path.display()))
 }
@@ -258,12 +251,6 @@ fn add(args: &ConnectorAddArgs, catalog_path: &Path, writer: &mut impl Write) ->
     if !lns_spec::is_legal_connector_id(&args.id) {
         bail!(
             "invalid connector id {:?}: an id is one lowercase DNS label of alphanumerics and '-'",
-            args.id
-        );
-    }
-    if is_bundled(&args.id) {
-        bail!(
-            "{:?} is a bundled connector and cannot be redeclared",
             args.id
         );
     }
@@ -318,18 +305,13 @@ fn add(args: &ConnectorAddArgs, catalog_path: &Path, writer: &mut impl Write) ->
 
 fn list(args: &ConnectorListArgs, catalog_path: &Path, writer: &mut impl Write) -> Result<i32> {
     let user = load_catalog(catalog_path)?;
-    let mut rows: Vec<ConnectorRow> = bundled_connectors()
-        .iter()
-        .map(|i| ConnectorRow::new(i, "bundled"))
-        .collect();
-    // A user id that shadows a bundled one is inert (bundled wins), so don't list it as live.
-    rows.extend(
-        user.connectors
-            .iter()
-            .filter(|i| !is_bundled(&i.id))
-            .map(|i| ConnectorRow::new(i, "user")),
-    );
-    crate::output::emit(args.output.format, &rows, writer)?;
+    let rows: Vec<ConnectorRow> = user.connectors.iter().map(ConnectorRow::new).collect();
+    crate::output::emit_or_note(
+        args.output.format,
+        &rows,
+        "No connectors in your catalog. Declare one with `lns connector add`.",
+        writer,
+    )?;
     Ok(0)
 }
 
@@ -337,36 +319,27 @@ fn list(args: &ConnectorListArgs, catalog_path: &Path, writer: &mut impl Write) 
 #[serde(rename_all = "camelCase")]
 struct ConnectorRow {
     id: String,
-    source: &'static str,
     auth_kind: &'static str,
 }
 
 impl ConnectorRow {
-    fn new(connector: &Connector, source: &'static str) -> Self {
+    fn new(connector: &Connector) -> Self {
         Self {
             id: connector.id.clone(),
-            source,
             auth_kind: kind_word(connector.auth_kind),
         }
     }
 }
 
 impl crate::output::TableRow for ConnectorRow {
-    const HEADERS: &'static [&'static str] = &["CONNECTOR", "SOURCE", "AUTH"];
+    const HEADERS: &'static [&'static str] = &["CONNECTOR", "AUTH"];
 
     fn cells(&self) -> Vec<String> {
-        vec![
-            self.id.clone(),
-            self.source.to_string(),
-            self.auth_kind.to_string(),
-        ]
+        vec![self.id.clone(), self.auth_kind.to_string()]
     }
 }
 
 fn remove(args: &ConnectorRemoveArgs, catalog_path: &Path, writer: &mut impl Write) -> Result<i32> {
-    if is_bundled(&args.id) {
-        bail!("{:?} is a bundled connector and cannot be removed", args.id);
-    }
     let mut catalog = load_catalog(catalog_path)?;
     let before = catalog.connectors.len();
     catalog.connectors.retain(|i| i.id != args.id);
@@ -389,8 +362,7 @@ pub async fn connect(
     writer: &mut impl Write,
 ) -> Result<i32> {
     let user = load_catalog(catalog_path)?;
-    let effective = effective_connectors(&user);
-    let Some(integ) = effective.iter().find(|i| i.id == args.id) else {
+    let Some(integ) = user.connectors.iter().find(|i| i.id == args.id) else {
         bail!("unknown connector {:?}; see `lns connector list`", args.id);
     };
     // Resolved before the sign-in: a mistyped --project must not cost the developer a completed browser device flow first.
@@ -713,12 +685,6 @@ mod tests {
         assert!(err.contains("does not take a header name"), "got: {err}");
     }
 
-    fn row_for<'a>(text: &'a str, id: &str) -> &'a str {
-        text.lines()
-            .find(|l| l.starts_with(id))
-            .unwrap_or_else(|| panic!("no listing row for {id} in:\n{text}"))
-    }
-
     fn list_args() -> ConnectorListArgs {
         ConnectorListArgs {
             output: crate::output::OutputArgs {
@@ -888,43 +854,12 @@ mod tests {
     }
 
     #[test]
-    fn add_rejects_a_bundled_id() {
-        let dir = TempDir::new().unwrap();
-        let err = add(
-            &add_args("gitlab"),
-            &catalog_at(dir.path()),
-            &mut Vec::new(),
-        )
-        .unwrap_err();
-        assert!(format!("{err:#}").contains("bundled"));
-    }
-
-    #[test]
     fn add_rejects_a_duplicate_user_id() {
         let dir = TempDir::new().unwrap();
         let path = catalog_at(dir.path());
         add(&add_args("acme"), &path, &mut Vec::new()).unwrap();
         let err = add(&add_args("acme"), &path, &mut Vec::new()).unwrap_err();
         assert!(format!("{err:#}").contains("already exists"));
-    }
-
-    #[test]
-    fn list_shows_bundled_and_user_connectors_labelled() {
-        let dir = TempDir::new().unwrap();
-        let path = catalog_at(dir.path());
-        add(&add_args("acme"), &path, &mut Vec::new()).unwrap();
-        let mut out = Vec::new();
-        list(&list_args(), &path, &mut out).unwrap();
-        let text = String::from_utf8(out).unwrap();
-        assert!(text.contains("CONNECTOR"), "{text}");
-        assert!(
-            row_for(&text, "gitlab").ends_with("bundled  credential"),
-            "{text}"
-        );
-        assert!(
-            row_for(&text, "acme").ends_with("user     credential"),
-            "{text}"
-        );
     }
 
     #[test]
@@ -937,36 +872,6 @@ mod tests {
         assert!(
             String::from_utf8(out).unwrap().contains("somesaas"),
             "oauth kind must be labelled"
-        );
-    }
-
-    #[test]
-    fn list_skips_a_user_entry_that_shadows_a_bundled_id() {
-        let dir = TempDir::new().unwrap();
-        let path = catalog_at(dir.path());
-        write_user_catalog(
-            &path,
-            vec![Connector {
-                id: "gitlab".into(),
-                name: None,
-                auth_kind: AuthKind::Credential,
-                routes: Vec::new(),
-                credential: Some(CredentialAuth {
-                    env_var: "EVIL".into(),
-                    placeholder: "lns-evil-placeholder".into(),
-                    injections: Vec::new(),
-                }),
-                oauth: None,
-                token_fallback: None,
-            }],
-        );
-        let mut out = Vec::new();
-        list(&list_args(), &path, &mut out).unwrap();
-        let text = String::from_utf8(out).unwrap();
-        assert!(row_for(&text, "gitlab").contains("bundled"), "{text}");
-        assert!(
-            text.lines().filter(|l| l.starts_with("gitlab")).count() == 1,
-            "a shadow must not be listed: {text}"
         );
     }
 
@@ -992,20 +897,6 @@ mod tests {
         )
         .unwrap();
         assert!(load(&path).connectors.is_empty());
-    }
-
-    #[test]
-    fn remove_rejects_a_bundled_id() {
-        let dir = TempDir::new().unwrap();
-        let err = remove(
-            &ConnectorRemoveArgs {
-                id: "gitlab".into(),
-            },
-            &catalog_at(dir.path()),
-            &mut Vec::new(),
-        )
-        .unwrap_err();
-        assert!(format!("{err:#}").contains("bundled"));
     }
 
     #[test]

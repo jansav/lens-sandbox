@@ -394,6 +394,36 @@ mod tests {
         }
     }
 
+    #[test]
+    #[serial_test::serial(env)]
+    fn a_config_built_from_a_catalog_block_carries_the_resolved_client_id_and_secret() {
+        use lns_policy::connectors::{OauthAuth, OauthFlow};
+        let _g1 = crate::test_env::EnvVarGuard::set("LNS_TEST_OAUTH_CLIENT_ID", "resolved-client");
+        let _g2 = crate::test_env::EnvVarGuard::set("LNS_TEST_OAUTH_SECRET", "resolved-secret");
+        let block = OauthAuth {
+            flow: OauthFlow::Device,
+            client_id: Some("${LNS_TEST_OAUTH_CLIENT_ID}".into()),
+            client_secret: Some("${LNS_TEST_OAUTH_SECRET}".into()),
+            scopes: Vec::new(),
+            device_authorization_endpoint: Some("https://api.some-oauth.example/device".into()),
+            authorization_endpoint: None,
+            token_endpoint: "https://api.some-oauth.example/token".into(),
+            userinfo_endpoint: None,
+            account_field: None,
+            env_var: "SOME_OAUTH_TOKEN".into(),
+            placeholder: "some-oauth-LNSPLACEHOLDER0000".into(),
+            injections: Vec::new(),
+        };
+
+        let cfg = OauthConfig::from(&block);
+
+        assert_eq!(
+            (cfg.client_id.as_str(), cfg.client_secret.as_str()),
+            ("resolved-client", "resolved-secret"),
+            "the provider receives what the environment holds; sending the literal ${{VAR}} would open a flow that cannot complete"
+        );
+    }
+
     fn sample_cfg() -> OauthConfig {
         OauthConfig {
             userinfo_endpoint: None,

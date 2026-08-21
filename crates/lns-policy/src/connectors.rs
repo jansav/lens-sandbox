@@ -1,8 +1,6 @@
-use std::collections::HashSet;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::LazyLock;
 
 use serde::{Deserialize, Serialize};
 
@@ -119,6 +117,26 @@ pub struct Connector {
     pub token_fallback: Option<TokenFallback>,
 }
 
+impl OauthAuth {
+    /// The client id a sign-in can use, with any `${VAR}` resolved; `None` when it names nothing, so the flow is withheld rather than attempted with a literal reference.
+    pub fn client_id_resolved(&self) -> Option<String> {
+        resolved_env_value(self.client_id.as_deref())
+    }
+
+    /// The client secret a confidential device client sends, with any `${VAR}` resolved.
+    pub fn client_secret_resolved(&self) -> Option<String> {
+        resolved_env_value(self.client_secret.as_deref())
+    }
+}
+
+fn resolved_env_value(raw: Option<&str>) -> Option<String> {
+    let resolved = crate::env_subst::resolve_from_env(raw?);
+    if resolved.is_empty() || resolved.contains("${") {
+        return None;
+    }
+    Some(resolved)
+}
+
 impl Connector {
     /// The user-facing label for cards and prompts; falls back to the id when no `name` is set.
     pub fn display_name(&self) -> &str {
@@ -228,47 +246,8 @@ impl Catalog {
     }
 }
 
-mod build_env {
-    include!(concat!(env!("OUT_DIR"), "/env_substitutions.rs"));
-}
-
-static BUNDLED: LazyLock<Vec<Connector>> = LazyLock::new(|| {
-    let resolved = crate::env_subst::apply_substitutions(
-        include_str!("connectors.yaml"),
-        build_env::ENV_SUBSTITUTIONS,
-    );
-    parse_catalog(&resolved).connectors
-});
-
-/// Panics on a malformed or inconsistent manifest; the shipped catalog is test-proven well-formed, so the production caller never hits those arms.
-fn parse_catalog(yaml_src: &str) -> Catalog {
-    let catalog: Catalog =
-        serde_yaml::from_str(yaml_src).expect("bundled connector catalog must be valid YAML");
-    let consistent = "bundled connector catalog must be internally consistent";
-    catalog.validate().expect(consistent);
-    catalog
-}
-
-pub fn bundled_connectors() -> &'static [Connector] {
-    BUNDLED.as_slice()
-}
-
 pub fn default_connectors_path() -> PathBuf {
     lns_spec::lns_home().join("connectors.yaml")
-}
-
-/// The effective catalog is the bundled set extended with user entries whose id isn't already shipped — a bundled id can never be shadowed.
-pub fn effective_connectors(user: &Catalog) -> Vec<Connector> {
-    let mut out: Vec<Connector> = bundled_connectors().to_vec();
-    let bundled_ids: HashSet<&str> = out.iter().map(|i| i.id.as_str()).collect();
-    let extra: Vec<Connector> = user
-        .connectors
-        .iter()
-        .filter(|i| !bundled_ids.contains(i.id.as_str()))
-        .cloned()
-        .collect();
-    out.extend(extra);
-    out
 }
 
 pub trait CatalogStore: Send + Sync {
@@ -733,396 +712,56 @@ mod tests {
     }
 
     #[test]
-    fn bundled_catalog_parses_and_ships_services() {
-        let ids: HashSet<&str> = bundled_connectors().iter().map(|i| i.id.as_str()).collect();
-        assert!(
-            !ids.is_empty(),
-            "the bundled catalog should ship at least one service"
-        );
-    }
-
-    #[test]
-    fn bundled_openai_injects_a_bearer_header() {
-        let openai = bundled_connectors()
-            .iter()
-            .find(|i| i.id == "openai")
-            .expect("openai is bundled");
-        let cred = openai.credential.as_ref().unwrap();
-        assert_eq!(cred.env_var, "OPENAI_API_KEY");
-        assert!(
-            cred.injections
-                .iter()
-                .any(|i| i.kind == InjectionKind::BearerHeader && i.domain == "api.openai.com"),
-            "got: {:?}",
-            cred.injections
-        );
-    }
-
-    #[test]
-    fn bundled_anthropic_covers_both_x_api_key_and_bearer_for_openai_compatible_clients() {
-        let anthropic = bundled_connectors()
-            .iter()
-            .find(|i| i.id == "anthropic")
-            .expect("anthropic is bundled");
-        let cred = anthropic.credential.as_ref().unwrap();
-        assert_eq!(cred.env_var, "ANTHROPIC_API_KEY");
-        assert!(
-            cred.injections
-                .iter()
-                .any(|i| i.kind == InjectionKind::ApiKeyHeader
-                    && i.domain == "api.anthropic.com"
-                    && i.header.as_deref() == Some("x-api-key")),
-            "native SDKs send x-api-key, got: {:?}",
-            cred.injections
-        );
-        assert!(
-            cred.injections
-                .iter()
-                .any(|i| i.kind == InjectionKind::BearerHeader && i.domain == "api.anthropic.com"),
-            "OpenAI-compatible clients send Authorization: Bearer, got: {:?}",
-            cred.injections
-        );
-    }
-
-    #[test]
-    fn bundled_claude_code_subscription_bearer_injects_an_oat01_token_on_the_anthropic_api() {
-        let integ = bundled_connectors()
-            .iter()
-            .find(|i| i.id == "claude-code-subscription")
-            .expect("claude-code-subscription is bundled");
-        assert_eq!(integ.auth_kind, AuthKind::Credential);
-        let cred = integ.credential.as_ref().unwrap();
-        assert_eq!(cred.env_var, "CLAUDE_CODE_OAUTH_TOKEN");
-        assert!(
-            cred.placeholder.starts_with("sk-ant-oat01-"),
-            "the placeholder must mimic a real `claude setup-token` so Claude Code emits it, got: {}",
-            cred.placeholder
-        );
-        assert!(
-            cred.injections
-                .iter()
-                .all(|i| i.kind == InjectionKind::BearerHeader && i.domain == "api.anthropic.com"),
-            "a subscription OAuth token rides only as Authorization: Bearer, got: {:?}",
-            cred.injections
-        );
+    #[serial_test::serial(env)]
+    fn a_client_id_reference_resolves_from_the_environment() {
+        use crate::test_env::EnvVarGuard;
+        let _g = EnvVarGuard::set("LNS_TEST_OAUTH_CLIENT_ID", "resolved-client");
+        let mut c = oauth_connector();
+        c.oauth.as_mut().unwrap().client_id = Some("${LNS_TEST_OAUTH_CLIENT_ID}".into());
         assert_eq!(
-            integ
-                .token_fallback
-                .as_ref()
-                .and_then(|f| f.command.as_deref()),
-            Some("claude setup-token"),
-            "the card must point the user at `claude setup-token` to mint the token"
+            c.oauth.unwrap().client_id_resolved().as_deref(),
+            Some("resolved-client"),
+            "a real client id lives in the environment, never in the document"
         );
     }
 
     #[test]
-    fn bundled_bedrock_injects_a_bearer_header_on_the_regional_runtime_and_control_planes() {
-        let bedrock = bundled_connectors()
-            .iter()
-            .find(|i| i.id == "bedrock")
-            .expect("bedrock is bundled");
-        assert_eq!(bedrock.auth_kind, AuthKind::Credential);
-        let cred = bedrock.credential.as_ref().unwrap();
-        assert_eq!(cred.env_var, "AWS_BEARER_TOKEN_BEDROCK");
-        for domain in ["bedrock-runtime.*.amazonaws.com", "bedrock.*.amazonaws.com"] {
-            assert!(
-                cred.injections
-                    .iter()
-                    .any(|i| i.kind == InjectionKind::BearerHeader && i.domain == domain),
-                "the Bedrock API key rides as Authorization: Bearer to {domain}, got: {:?}",
-                cred.injections
-            );
+    #[serial_test::serial(env)]
+    fn an_unset_client_id_reference_resolves_to_no_usable_id() {
+        use crate::test_env::EnvVarGuard;
+        let _g = EnvVarGuard::unset("LNS_TEST_ABSENT_CLIENT_ID");
+        let mut c = oauth_connector();
+        c.oauth.as_mut().unwrap().client_id = Some("${LNS_TEST_ABSENT_CLIENT_ID}".into());
+        assert!(
+            c.oauth.unwrap().client_id_resolved().is_none(),
+            "a build that ships no client id must withhold the flow, not attempt it with a literal reference"
+        );
+    }
+
+    #[test]
+    #[serial_test::serial(env)]
+    fn reading_a_catalog_leaves_a_client_id_reference_in_the_document() {
+        use crate::test_env::EnvVarGuard;
+        let _g = EnvVarGuard::set("LNS_TEST_OAUTH_CLIENT_ID", "resolved-client");
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("connectors.yaml");
+        let mut c = oauth_connector();
+        c.oauth.as_mut().unwrap().client_id = Some("${LNS_TEST_OAUTH_CLIENT_ID}".into());
+        Catalog {
+            connectors: vec![c],
         }
-    }
+        .save_atomic(&path)
+        .unwrap();
 
-    #[test]
-    fn bundled_linear_injects_a_bearer_header() {
-        let linear = bundled_connectors()
-            .iter()
-            .find(|i| i.id == "linear")
-            .expect("linear is bundled");
-        let cred = linear.credential.as_ref().unwrap();
-        assert_eq!(cred.env_var, "LINEAR_API_KEY");
+        let read = Catalog::load_or_default(&path).unwrap();
+        read.save_atomic(&path).unwrap();
+
         assert!(
-            cred.injections
-                .iter()
-                .any(|i| i.kind == InjectionKind::BearerHeader && i.domain == "api.linear.app"),
-            "got: {:?}",
-            cred.injections
+            fs::read_to_string(&path)
+                .unwrap()
+                .contains("${LNS_TEST_OAUTH_CLIENT_ID}"),
+            "a read-modify-write of the catalog must not bake the resolved id into the file, which is how a real client id would end up committed"
         );
-    }
-
-    #[test]
-    fn bundled_telegram_injects_via_uri_placeholder() {
-        let telegram = bundled_connectors()
-            .iter()
-            .find(|i| i.id == "telegram")
-            .expect("telegram is bundled");
-        let cred = telegram.credential.as_ref().unwrap();
-        assert_eq!(cred.env_var, "TELEGRAM_BOT_TOKEN");
-        assert!(
-            cred.injections
-                .iter()
-                .any(|i| i.kind == InjectionKind::UriPlaceholder && i.domain == "api.telegram.org"),
-            "telegram embeds the token in the URL path, got: {:?}",
-            cred.injections
-        );
-    }
-
-    #[test]
-    fn bundled_catalog_ships_gitlab_and_huggingface() {
-        let ids: HashSet<&str> = bundled_connectors().iter().map(|i| i.id.as_str()).collect();
-        assert!(ids.contains("gitlab"), "got: {ids:?}");
-        assert!(ids.contains("huggingface"), "got: {ids:?}");
-    }
-
-    #[test]
-    fn bundled_gitlab_injects_both_private_token_for_glab_and_bearer_for_oauth_clients() {
-        let gitlab = bundled_connectors()
-            .iter()
-            .find(|i| i.id == "gitlab")
-            .expect("gitlab is bundled");
-        let injections = &gitlab.credential.as_ref().unwrap().injections;
-        assert!(
-            injections
-                .iter()
-                .any(|inj| inj.kind == InjectionKind::ApiKeyHeader
-                    && inj.domain == "gitlab.com"
-                    && inj.header.as_deref() == Some("PRIVATE-TOKEN")),
-            "glab sends its PAT in PRIVATE-TOKEN; expected an api_key_header injection for it, got: {injections:?}"
-        );
-        assert!(
-            injections
-                .iter()
-                .any(|inj| inj.kind == InjectionKind::BearerHeader && inj.domain == "gitlab.com"),
-            "Authorization: Bearer clients still need covering, got: {injections:?}"
-        );
-    }
-
-    #[test]
-    fn every_bundled_connector_is_valid_with_a_self_identifying_placeholder_and_routes() {
-        for i in bundled_connectors() {
-            assert!(i.validate().is_ok(), "{} is inconsistent", i.id);
-            let placeholder = match i.auth_kind {
-                AuthKind::Credential => {
-                    &i.credential
-                        .as_ref()
-                        .expect("credential block present")
-                        .placeholder
-                }
-                AuthKind::Oauth => &i.oauth.as_ref().expect("oauth block present").placeholder,
-            };
-            assert!(
-                crate::providers::is_self_identifying(placeholder),
-                "{} placeholder must self-identify: {placeholder}",
-                i.id,
-            );
-            assert!(
-                !i.routes.is_empty(),
-                "{} must declare the routes it needs",
-                i.id
-            );
-        }
-    }
-
-    #[test]
-    fn bundled_catalog_ships_github_as_an_oauth_connector() {
-        let gh = bundled_connectors()
-            .iter()
-            .find(|i| i.id == "github")
-            .expect("github is bundled");
-        assert_eq!(gh.auth_kind, AuthKind::Oauth);
-        let oauth = gh.oauth.as_ref().expect("oauth block present");
-        assert_eq!(oauth.env_var, "GH_TOKEN");
-        assert!(
-            oauth
-                .injections
-                .iter()
-                .any(|i| i.kind == InjectionKind::TokenHeader && i.domain == "api.github.com"),
-            "gh/API use `Authorization: token`, got: {:?}",
-            oauth.injections
-        );
-        assert!(
-            oauth
-                .injections
-                .iter()
-                .any(|i| i.kind == InjectionKind::BasicXAccessToken && i.domain == "github.com"),
-            "git-over-HTTPS uses basic x-access-token, got: {:?}",
-            oauth.injections
-        );
-    }
-
-    #[test]
-    fn bundled_github_resolves_its_account_from_the_user_endpoint() {
-        let gh = bundled_connectors()
-            .iter()
-            .find(|i| i.id == "github")
-            .expect("github is bundled");
-        let oauth = gh.oauth.as_ref().expect("oauth block present");
-        assert_eq!(
-            oauth.userinfo_endpoint.as_deref(),
-            Some("https://api.github.com/user")
-        );
-        assert_eq!(
-            oauth.account_field.as_deref(),
-            Some("login"),
-            "the connection ledger reads GitHub's account from the `login` field"
-        );
-    }
-
-    #[test]
-    fn bundled_github_declares_a_token_fallback_so_a_blocked_oauth_can_pivot_to_a_pat() {
-        let gh = bundled_connectors()
-            .iter()
-            .find(|i| i.id == "github")
-            .expect("github is bundled");
-        let fallback = gh
-            .token_fallback
-            .as_ref()
-            .expect("github must offer a token fallback for SSO/approval-gated orgs");
-        assert!(
-            fallback
-                .help
-                .as_deref()
-                .is_some_and(|h| h.starts_with("https://")),
-            "the fallback should point at a token-creation URL, got: {:?}",
-            fallback.help
-        );
-    }
-
-    #[test]
-    fn bundled_catalog_ships_openrouter_as_a_pkce_connector() {
-        let or = bundled_connectors()
-            .iter()
-            .find(|i| i.id == "openrouter")
-            .expect("openrouter is bundled");
-        assert_eq!(or.auth_kind, AuthKind::Oauth);
-        let oauth = or.oauth.as_ref().expect("oauth block present");
-        assert_eq!(
-            oauth.flow,
-            OauthFlow::Pkce,
-            "OpenRouter signs in by the browser-redirect PKCE flow"
-        );
-        assert_eq!(oauth.env_var, "OPENROUTER_API_KEY");
-        assert!(
-            oauth.client_id.is_none(),
-            "OpenRouter's PKCE flow takes no client id"
-        );
-        assert_eq!(
-            oauth.authorization_endpoint.as_deref(),
-            Some("https://openrouter.ai/auth")
-        );
-        assert_eq!(
-            oauth.token_endpoint,
-            "https://openrouter.ai/api/v1/auth/keys"
-        );
-        assert!(
-            oauth
-                .injections
-                .iter()
-                .any(|i| i.kind == InjectionKind::BearerHeader && i.domain == "openrouter.ai"),
-            "OpenRouter keys are sent as Authorization: Bearer, got: {:?}",
-            oauth.injections
-        );
-    }
-
-    #[test]
-    fn bundled_google_signs_in_via_oauth_device_flow_with_a_client_secret_and_injects_a_bearer_header()
-     {
-        let google = bundled_connectors()
-            .iter()
-            .find(|i| i.id == "google")
-            .expect("google is bundled");
-        assert_eq!(google.auth_kind, AuthKind::Oauth);
-        let oauth = google.oauth.as_ref().expect("oauth block present");
-        assert_eq!(oauth.flow, OauthFlow::Device);
-        assert_eq!(oauth.env_var, "GOOGLE_OAUTH_ACCESS_TOKEN");
-        assert_eq!(
-            oauth.device_authorization_endpoint.as_deref(),
-            Some("https://oauth2.googleapis.com/device/code")
-        );
-        assert_eq!(oauth.token_endpoint, "https://oauth2.googleapis.com/token");
-        assert!(
-            oauth.client_secret.is_some(),
-            "Google's device flow requires a client secret in the token exchange"
-        );
-        assert!(
-            oauth
-                .injections
-                .iter()
-                .any(|i| i.kind == InjectionKind::BearerHeader && i.domain == "www.googleapis.com"),
-            "Google APIs take Authorization: Bearer, got: {:?}",
-            oauth.injections
-        );
-        assert!(
-            google
-                .token_fallback
-                .as_ref()
-                .and_then(|f| f.help.as_deref())
-                .is_some_and(|h| h.starts_with("https://")),
-            "an unconfigured build must let the user pivot to a pasted token, got: {:?}",
-            google.token_fallback
-        );
-    }
-
-    #[test]
-    fn no_bundled_connector_commits_a_literal_oauth_client_id() {
-        let raw = include_str!("connectors.yaml");
-        for line in raw.lines() {
-            if let Some(rest) = line.trim_start().strip_prefix("clientId:") {
-                let value = rest.trim();
-                assert!(
-                    value.starts_with("\"${") && value.ends_with("}\""),
-                    "clientId must be a build-time env reference, never a committed literal: {line:?}"
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn no_bundled_connector_commits_a_literal_oauth_client_secret() {
-        let raw = include_str!("connectors.yaml");
-        for line in raw.lines() {
-            if let Some(rest) = line.trim_start().strip_prefix("clientSecret:") {
-                let value = rest.trim();
-                assert!(
-                    value.starts_with("\"${") && value.ends_with("}\""),
-                    "clientSecret must be a build-time env reference, never a committed literal: {line:?}"
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn the_github_oauth_client_id_is_sourced_from_the_build_env() {
-        let raw = include_str!("connectors.yaml");
-        assert!(
-            raw.contains("clientId: \"${LNS_OAUTH_CLIENT_ID_GITHUB}\""),
-            "the github oauth client_id must come from the LNS_OAUTH_CLIENT_ID_GITHUB build var, not a committed literal"
-        );
-    }
-
-    #[test]
-    #[should_panic(expected = "bundled connector catalog must be valid YAML")]
-    fn parse_catalog_panics_on_malformed_yaml() {
-        parse_catalog("connectors: [ this is : not valid");
-    }
-
-    #[test]
-    #[should_panic(expected = "bundled connector catalog must be internally consistent")]
-    fn parse_catalog_panics_on_a_credential_entry_missing_its_block() {
-        parse_catalog("connectors:\n  - id: x\n    authKind: credential\n");
-    }
-
-    #[test]
-    fn a_bundled_entry_pasted_into_a_user_file_deserializes_identically() {
-        let entry = bundled_connectors()[0].clone();
-        let as_user_catalog = Catalog {
-            connectors: vec![entry.clone()],
-        };
-        let yaml = serde_yaml::to_string(&as_user_catalog).unwrap();
-        let parsed: Catalog = serde_yaml::from_str(&yaml).unwrap();
-        assert_eq!(parsed.connectors, vec![entry]);
     }
 
     #[test]
@@ -1296,44 +935,6 @@ mod tests {
         let store = FileCatalogStore::new(not_a_dir.join("nested/.lns/connectors.yaml"));
         let err = store.save(&Catalog::default()).unwrap_err();
         assert!(!err.to_string().is_empty());
-    }
-
-    #[test]
-    fn effective_connectors_is_bundled_only_for_an_empty_user_catalog() {
-        let eff = effective_connectors(&Catalog::default());
-        assert_eq!(eff.len(), bundled_connectors().len());
-    }
-
-    #[test]
-    fn effective_connectors_appends_a_user_only_connector() {
-        let user = Catalog {
-            connectors: vec![sample_connector()],
-        };
-        let eff = effective_connectors(&user);
-        assert_eq!(eff.len(), bundled_connectors().len() + 1);
-        assert!(eff.iter().any(|i| i.id == "acme"));
-    }
-
-    #[test]
-    fn effective_connectors_drops_a_user_entry_that_shadows_a_bundled_id() {
-        let mut shadow = sample_connector();
-        shadow.id = "gitlab".into();
-        shadow.credential = Some(credential("EVIL", "lns-evil", "gitlab.com"));
-        let user = Catalog {
-            connectors: vec![shadow],
-        };
-        let eff = effective_connectors(&user);
-        assert_eq!(
-            eff.len(),
-            bundled_connectors().len(),
-            "a user shadow must not add a second gitlab"
-        );
-        let gitlab = eff.iter().find(|i| i.id == "gitlab").unwrap();
-        assert_ne!(
-            gitlab.credential.as_ref().unwrap().env_var,
-            "EVIL",
-            "the bundled gitlab definition must win over a user shadow"
-        );
     }
 
     #[test]

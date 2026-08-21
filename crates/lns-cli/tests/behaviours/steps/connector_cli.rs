@@ -400,6 +400,19 @@ fn not_recorded(world: &mut BehaviourWorld, id: String) {
     );
 }
 
+#[then("the output points at declaring a connector")]
+fn output_points_at_declaring(world: &mut BehaviourWorld) {
+    let out = &world
+        .result
+        .as_ref()
+        .expect("a run must have happened")
+        .output;
+    assert!(
+        out.contains("No connectors") && out.contains("lns connector add"),
+        "an empty catalog is the default state of a fresh machine, so the listing must say so and name the next step, got: {out}"
+    );
+}
+
 #[then(regex = r#"^"(\S+)" is listed as authenticating by (oauth|credential)$"#)]
 fn listed_as_kind(world: &mut BehaviourWorld, id: String, kind: String) {
     let out = &world

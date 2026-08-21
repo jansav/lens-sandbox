@@ -9,14 +9,10 @@ placeholders work).
 
 ## The catalog
 
-The set of connectors Lens Sandbox knows about is a **catalog** with two layers:
-
-- **Bundled** — ships inside `lns` and grows with each release, so common services
-  work without any setup on your part.
-- **User** — your own additions in `~/.lns/connectors.yaml`.
-
-The effective catalog is the union of the two; a user entry can't shadow a bundled
-id. List everything Lens Sandbox can connect:
+The set of connectors Lens Sandbox knows about is your own **catalog**, at
+`~/.lns/connectors.yaml`. Nothing ships inside `lns`: a machine with an empty
+catalog still runs every sandbox, and each declared credential is simply asked
+for directly. List what this machine can connect:
 
 ```bash
 lns connector list
@@ -33,7 +29,7 @@ lns connector add acme \
   --route api.acme.internal
 ```
 
-- `id` — the connector id; must not collide with a bundled or existing user id.
+- `id` — the connector id; must not collide with one already in your catalog.
 - `--env-var` — the environment variable the placeholder is seeded into.
 - `--inject KIND:DOMAIN` — how and where the real value is injected (repeatable); see
   the [injection kinds](credentials.md#injection-kinds).
@@ -41,7 +37,7 @@ lns connector add acme \
 - `--placeholder` — a specific placeholder; auto-generated (self-identifying) when
   omitted.
 
-Remove a user connector (bundled ones can't be removed):
+Remove a connector:
 
 ```bash
 lns connector remove acme
@@ -101,7 +97,7 @@ pick it up.
 
 ## The catalog file
 
-The bundled and user catalogs share one schema, so an entry is portable between them:
+A catalog entry looks like this:
 
 ```yaml
 connectors:
@@ -137,13 +133,17 @@ place of `credential:`) whose `flow` selects one of two shapes:
 - **`flow: device`** (RFC 8628, the default) — `connect` prints a verification URL and
   a code, and you authorize in a browser. The token is short-lived, refreshed
   automatically, and a grant that can no longer be refreshed re-prompts the sign-in on
-  next use. The bundled `github` connector signs in this way; its block carries a
-  client id, scopes, and the device-authorization and token endpoints.
+  next use. A device-flow connector signs in this way; its block carries a
+  client id, scopes, and the device-authorization and token endpoints. `clientId`
+  (and `clientSecret`, for a confidential client) may be a `${VAR}` reference,
+  resolved from the service's environment when the catalog is read — so a real id
+  never lives in the file. A reference naming nothing withholds the sign-in and
+  offers the token paste instead.
 - **`flow: pkce`** (OAuth 2.0 authorization code + PKCE) — `connect` opens your browser
   to the provider's authorization page, and after you approve, the service captures the
   returned key over a one-time loopback callback. The result is a **durable** key with
-  no refresh or expiry, so it stays armed across runs until the provider revokes it. The
-  bundled `openrouter` connector signs in this way; its block carries an authorization
+  no refresh or expiry, so it stays armed across runs until the provider revokes it. A
+  pkce connector signs in this way; its block carries an authorization
   endpoint and a token endpoint (and no client id).
 
 ## See also
