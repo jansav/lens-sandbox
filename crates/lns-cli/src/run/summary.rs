@@ -700,7 +700,6 @@ mod tests {
                 owner: lns_ipc::SandboxFilesetOwner::Root,
                 optional: false,
             }],
-            connectors: Vec::new(),
             env: Vec::new(),
             credentials: Vec::new(),
             tools: Vec::new(),

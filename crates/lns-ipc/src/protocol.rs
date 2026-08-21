@@ -408,8 +408,6 @@ pub struct SandboxView {
     #[serde(default)]
     pub filesets: Vec<SandboxFileset>,
     #[serde(default)]
-    pub connectors: Vec<String>,
-    #[serde(default)]
     pub env: Vec<String>,
     #[serde(default)]
     pub credentials: Vec<lns_spec::Credential>,
@@ -631,7 +629,7 @@ pub struct RunImageArgs {
     /// True when `image` is a reference the service must classify (refusing a plain OCI image that is not a sandbox); false for a local sandbox's base image, which the CLI has already resolved and the service runs directly.
     #[serde(default)]
     pub verify_sandbox: bool,
-    /// A local sandbox definition as canonical JSON; the service plans it like a published sandbox so its policy, connectors, and resources apply.
+    /// A local sandbox definition as canonical JSON; the service plans it like a published sandbox so its policy and resources apply.
     #[serde(default)]
     pub definition: Option<String>,
     /// The local definition's absolute directory, keying its per-workload connector grants; absent for a published reference (which keys by repo@digest instead).
@@ -1675,7 +1673,6 @@ mod tests {
                 guest_path: "/root/.agent/skills".into(),
                 owner: SandboxFilesetOwner::Workload,
             }],
-            connectors: Vec::new(),
             env: vec!["SHELL=/bin/sh".into()],
             credentials: vec![lns_spec::Credential {
                 env_var: "SOME_TOKEN".into(),

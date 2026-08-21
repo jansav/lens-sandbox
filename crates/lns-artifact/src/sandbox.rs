@@ -101,7 +101,7 @@ impl Volume {
     }
 }
 
-/// The whole sandbox in one document: the base image plus its config, env, embedded network policy, mounts, and the connector ids it needs.
+/// The whole sandbox in one document: the base image plus its config, env, embedded network policy, and mounts.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SandboxSpec {
@@ -120,8 +120,6 @@ pub struct SandboxSpec {
     pub resources: Option<Resources>,
     #[serde(default)]
     pub egress: Egress,
-    #[serde(default)]
-    pub connectors: Vec<String>,
     #[serde(default)]
     pub credentials: Vec<lns_spec::Credential>,
     #[serde(default)]
@@ -227,7 +225,7 @@ fn validate_mixin_reference(reference: &str) -> Result<()> {
     Ok(())
 }
 
-/// The blocks a mixin may not carry: the five that describe one launch, which the sandbox owns, plus the connector list — how a credential is obtained is decided per machine, never by a document that travels with a workload.
+/// The five blocks a mixin may not carry, because they describe one launch and the sandbox owns it.
 fn refuse_blocks_a_mixin_cannot_carry(spec: &SandboxSpec) -> Result<()> {
     let launch_blocks = [
         (!spec.image.trim().is_empty(), "image"),
@@ -238,11 +236,6 @@ fn refuse_blocks_a_mixin_cannot_carry(spec: &SandboxSpec) -> Result<()> {
     ];
     if let Some((_, block)) = launch_blocks.iter().find(|(declared, _)| *declared) {
         bail!("a mixin must not declare {block}: it describes one launch, and the sandbox owns it");
-    }
-    if !spec.connectors.is_empty() {
-        bail!(
-            "a mixin must not name a connector: which method supplies a credential is decided per machine"
-        );
     }
     Ok(())
 }
@@ -309,11 +302,6 @@ fn parse_of_kind(config_json: &[u8], kind: spec::Kind) -> Result<Definition> {
         validate_volume(volume).with_context(|| format!("volume targeting {}", volume.target))?;
         if !targets.insert(&volume.target) {
             bail!("duplicate volume target {}", volume.target);
-        }
-    }
-    for connector in &doc.spec.connectors {
-        if !spec::is_valid_name(connector) {
-            bail!("invalid connector id {connector:?}");
         }
     }
     lns_spec::credential::validate_all(&doc.spec.credentials)
@@ -751,12 +739,25 @@ mod tests {
     }
 
     #[test]
-    fn a_mixin_may_not_name_a_connector() {
-        let err = parse_mixin(&mixin_json(r#"{"connectors":["some-provider"]}"#)).unwrap_err();
-        assert!(
-            format!("{err:#}").contains("a mixin must not name a connector"),
-            "how a credential is obtained is the user's decision on their own machine, and the retired field stays a sandbox-only divergence rather than spreading to a new kind; got: {err:#}"
-        );
+    fn no_document_may_name_a_connector() {
+        for (kind, err) in [
+            (
+                "sandbox",
+                parse(&def_json(
+                    r#"{"image":"x:1","connectors":["some-provider"]}"#,
+                ))
+                .unwrap_err(),
+            ),
+            (
+                "mixin",
+                parse_mixin(&mixin_json(r#"{"connectors":["some-provider"]}"#)).unwrap_err(),
+            ),
+        ] {
+            assert!(
+                format!("{err:#}").contains("unknown field"),
+                "no artifact names a connector: which method supplies a credential is decided per machine, so a {kind} naming one must not load at all; got: {err:#}"
+            );
+        }
     }
 
     #[test]
@@ -933,7 +934,7 @@ mod tests {
     #[test]
     fn parse_reads_the_whole_flat_definition() {
         let json = def_json(
-            r#"{"image":"ghcr.io/team/base:1","command":"agent --serve","workdir":"/workspace","env":{"MODE":"research"},"resources":{"cpu":2,"memory":"1Gi"},"egress":{"http":[{"match":"api.example.test","verdict":"allow"},{"match":"*","verdict":"deny"}]},"connectors":["some-provider"],"credentials":[{"envVar":"SOME_TOKEN","placeholder":"some_LNSPLACEHOLDER0000"}],"volumes":[{"type":"bind","source":".","target":"/workspace"},{"type":"volume","source":"home","target":"/root/.home","readOnly":true}],"ports":[{"container":8080}]}"#,
+            r#"{"image":"ghcr.io/team/base:1","command":"agent --serve","workdir":"/workspace","env":{"MODE":"research"},"resources":{"cpu":2,"memory":"1Gi"},"egress":{"http":[{"match":"api.example.test","verdict":"allow"},{"match":"*","verdict":"deny"}]},"credentials":[{"envVar":"SOME_TOKEN","placeholder":"some_LNSPLACEHOLDER0000"}],"volumes":[{"type":"bind","source":".","target":"/workspace"},{"type":"volume","source":"home","target":"/root/.home","readOnly":true}],"ports":[{"container":8080}]}"#,
         );
         let def = parse(&json).unwrap();
         assert_eq!(def.name, "hermes");
@@ -950,7 +951,6 @@ mod tests {
             "a closed baseline carries its lockdown as a catch-all deny"
         );
         assert_eq!(def.spec.egress.http.len(), 2);
-        assert_eq!(def.spec.connectors, vec!["some-provider".to_string()]);
         assert_eq!(def.spec.credentials[0].env_var, "SOME_TOKEN");
         assert_eq!(def.spec.volumes[0].source(), ".");
         assert!(def.spec.volumes[0].is_bind());
@@ -964,7 +964,6 @@ mod tests {
         let def = parse(&def_json(r#"{"image":"ghcr.io/team/base:1"}"#)).unwrap();
         assert!(def.spec.egress.http.is_empty());
         assert!(def.spec.egress.tcp.is_empty());
-        assert!(def.spec.connectors.is_empty());
     }
 
     #[test]
@@ -2013,15 +2012,6 @@ mod tests {
         .unwrap_err();
         assert!(
             format!("{err:#}").contains("duplicate container port 3003"),
-            "got: {err:#}"
-        );
-    }
-
-    #[test]
-    fn parse_rejects_an_invalid_connector_id() {
-        let err = parse(&def_json(r#"{"image":"x:1","connectors":["Bad_Id"]}"#)).unwrap_err();
-        assert!(
-            format!("{err:#}").contains("invalid connector id"),
             "got: {err:#}"
         );
     }

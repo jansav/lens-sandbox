@@ -283,7 +283,7 @@ async fn sandbox_is_resolved_and_launched(w: &mut BehaviourWorld) {
         }
         Err(e) => Err(e),
     };
-    crate::steps::declared_connectors::launch_resolved(w, planned);
+    crate::steps::connected_connectors::launch_resolved(w, planned);
 }
 
 #[then(regex = r#"^the run installs "([^"]+)"$"#)]

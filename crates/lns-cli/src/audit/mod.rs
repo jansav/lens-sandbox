@@ -136,7 +136,6 @@ mod tests {
             &octx(run_id, "2026-06-29T13:00:00Z"),
             "ghcr.io/team/hermes:1.4.0",
             "sha256:abc",
-            &[],
             "policyhash",
         )
         .to_string();

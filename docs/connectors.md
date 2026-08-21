@@ -49,20 +49,8 @@ lns connector remove acme
 
 ## Reaching a workload
 
-A connector reaches a project's workloads in any of three ways:
+A connector reaches a project's workloads in either of two ways:
 
-- **Declared in the sandbox definition.** List its id under `spec.connectors`
-  in [`./lns.yaml`](running-workloads.md#defining-a-sandbox). Declaring seeds
-  the connector's placeholder env var — so a workload that checks for the
-  variable starts up and attempts its first request — but never arms it: no
-  route is opened and no bound value is injected on its behalf, even for a
-  credential already bound on this machine. The workload is offered a live
-  connect the first time it reaches the connector's domain; accepting it arms
-  the connector and records the connection for this project, per machine. This
-  is what keeps an untrusted published
-  sandbox from spending a bound credential or opening a route behind your back.
-  An id the machine's catalog doesn't know refuses the launch and points at
-  `lns connector add`.
 - **Asked for by a declared credential.** A definition's `spec.credentials`
   entry states the whole injection contract itself — the variable the workload
   reads, the placeholder it holds, and the domains the real value may travel to

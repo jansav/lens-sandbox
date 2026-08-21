@@ -689,16 +689,8 @@ pub(super) async fn start(
         load_user_catalog_or_warn(&lns_policy::connectors::default_connectors_path());
     let catalog = lns_policy::connectors::effective_connectors(&user_catalog);
     let applied = resolve_applied_with_credentials(&policy, sandbox_credentials, &catalog);
-    // Un-connected catalog connectors resolve as connectable — detect-only unless definition-declared — so their use offers a live connect.
-    let declared_connectors = sandbox_policy
-        .map(|p| p.connectors.clone())
-        .unwrap_or_default();
-    let connectable = resolve_connectable_with_credentials(
-        &policy,
-        sandbox_credentials,
-        &declared_connectors,
-        &catalog,
-    );
+    // Un-connected catalog connectors resolve as connectable and detect-only, so their use offers a live connect and seeds nothing.
+    let connectable = resolve_connectable_with_credentials(&policy, sandbox_credentials, &catalog);
     crate::artifact::policy::splice_connector_routes(
         &mut policy.network.egress.http,
         applied.routes,

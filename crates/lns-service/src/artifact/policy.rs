@@ -117,7 +117,7 @@ pub fn is_closed(policy: &Policy) -> bool {
     policy.network.is_closed()
 }
 
-/// Merge a sandbox's shipped `baseline` policy under a local `overlay` into one effective policy for the guest gate: the overlay is the later source, so its entries decide every destination both name, and only its connectors are applied — an artifact-declared connector the user has not connected in this directory is never force-armed, so it stays connectable and is offered as a live connect on first use.
+/// Merge a sandbox's shipped `baseline` policy under a local `overlay` into one effective policy for the guest gate: the overlay is the later source, so its entries decide every destination both name, and only its connectors are applied — a connector the user has not connected in this directory is never force-armed, so it stays connectable and is offered as a live connect on first use.
 pub fn merge_effective(baseline: Option<&Policy>, overlay: &Policy) -> Policy {
     let layers: Vec<&Policy> = std::iter::once(overlay).chain(baseline).collect();
     Policy {
@@ -585,7 +585,7 @@ mod tests {
             !merged
                 .connectors
                 .contains(&"some-artifact-connector".to_string()),
-            "an artifact-declared connector is never force-armed by the merge; it stays connectable and is offered on first use"
+            "no baseline can force-arm a connector the overlay has not connected; production cannot even build such a baseline now, and this keeps the merge honest if that changes"
         );
     }
 

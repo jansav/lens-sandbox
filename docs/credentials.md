@@ -30,9 +30,10 @@ routes it needs. `openai`, `anthropic`, `claude-code-subscription`, `bedrock`,
 `credential` connectors; `github` and `google` ship as `oauth` connectors (device
 sign-in) and `openrouter` as an `oauth` connector (pkce browser sign-in).
 Declare your own for an internal API with `lns connector add`
-(see [Connectors](connectors.md)). A sandbox definition that lists a provider
-under `spec.connectors` seeds its placeholder env var but only *offers* it —
-the workload is prompted on first use, never armed automatically.
+(see [Connectors](connectors.md)). No definition names a connector: which
+method supplies a credential is decided per machine, so a connector that
+nobody connected seeds nothing and is offered on first use, never armed
+automatically.
 `lns connector connect <id>` records the connection for that project on this
 machine and binds the value, but that alone does not arm the credential for a
 workload — see

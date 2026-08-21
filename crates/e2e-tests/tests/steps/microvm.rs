@@ -114,12 +114,6 @@ fn microvm_project(world: &mut E2eWorld) -> std::path::PathBuf {
             spec_tail.push_str(&format!("\n    {key}: {value}"));
         }
     }
-    if !world.project_connectors.is_empty() {
-        spec_tail.push_str("\n  connectors:");
-        for id in &world.project_connectors {
-            spec_tail.push_str(&format!("\n    - {id}"));
-        }
-    }
     if !world.project_egress.is_empty() {
         spec_tail.push_str("\n  egress:\n    http:");
         for host in &world.project_egress {
@@ -287,11 +281,6 @@ fn home_catalog_declares(world: &mut E2eWorld, id: String, env: String) {
     std::fs::create_dir_all(path.parent().expect("the catalog has a parent"))
         .expect("create the lns home");
     std::fs::write(&path, catalog).expect("write the user connector catalog");
-}
-
-#[given(regex = r#"^the project definition declares connector "([^"]+)"$"#)]
-fn project_declares_connector(world: &mut E2eWorld, id: String) {
-    world.project_connectors.push(id);
 }
 
 #[given(regex = r#"^the project definition declares credential "([^"]+)" for "([^"]+)"$"#)]

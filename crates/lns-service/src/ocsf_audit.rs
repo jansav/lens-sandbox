@@ -118,14 +118,12 @@ pub fn sandbox_run_event(
     cx: &OcsfCtx,
     reference: &str,
     digest: &str,
-    connectors: &[String],
     policy_hash: &str,
 ) -> Map<String, Value> {
     into_object(lns_ocsf::sandbox_run(
         &cx.ctx(),
         reference,
         digest,
-        connectors,
         policy_hash,
     ))
 }

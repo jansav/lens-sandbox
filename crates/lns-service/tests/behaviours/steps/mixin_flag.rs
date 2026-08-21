@@ -61,7 +61,7 @@ async fn resolve_with(w: &mut BehaviourWorld, extra: &[String]) {
         }
         Err(e) => Err(e),
     };
-    crate::steps::declared_connectors::launch_resolved(w, planned);
+    crate::steps::connected_connectors::launch_resolved(w, planned);
 }
 
 #[then("the resolution reports the mixin pinned by digest")]

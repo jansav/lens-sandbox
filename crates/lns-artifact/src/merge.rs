@@ -192,9 +192,6 @@ pub fn merge(sources: &[Source]) -> Result<Merged> {
         take_over(&mut spec.workdir, &source.spec.workdir);
         take_over(&mut spec.user, &source.spec.user);
         take_over(&mut spec.resources, &source.spec.resources);
-        if !source.spec.connectors.is_empty() {
-            spec.connectors = source.spec.connectors.clone();
-        }
     }
 
     let mut contributions = Vec::new();
@@ -1273,22 +1270,6 @@ mod tests {
             table[0].verdict,
             lns_policy::Verdict::Allow,
             "a raw destination merges by the same rule, so the later source's entry decides"
-        );
-    }
-
-    #[test]
-    fn a_resolved_sandbox_keeps_the_connector_list_its_own_document_declared() {
-        let merged = merged(&sources(&[
-            (
-                "the sandbox",
-                r#"{"image":"x:1","connectors":["some-provider"]}"#,
-            ),
-            ("later", r#"{"tools":["node@22"]}"#),
-        ]));
-        assert_eq!(
-            merged.connectors,
-            ["some-provider"],
-            "no mixin can name a connector, so resolution must not lose the list the sandbox itself carries"
         );
     }
 

@@ -10,8 +10,8 @@ hosts you allow.
 - **`lns.yaml`** — the sandbox definition: a slim Debian base with node declared
   under `spec.tools` (provisioned once per machine by the service, outside the
   policy cage), a first-boot install of Claude Code itself, the network
-  allowlist, the `claude-code-subscription` connector, and inline seed state
-  mounted at the workload's home (`/home/sandbox`). The inline `.claude.json` skips onboarding
+  allowlist, and inline seed state mounted at the workload's home
+  (`/home/sandbox`). The inline `.claude.json` skips onboarding
   and pre-accepts the `/workspace` trust dialog. The inline
   `.claude/settings.json` runs Claude in `bypassPermissions` and turns **off
   Claude's own sandbox**. Both are redundant here: the lns microVM is already
@@ -34,8 +34,17 @@ policy route. The first boot still runs `npm install -g
 each cold start reinstalls that package (the `egress.http` rules keep
 `registry.npmjs.org` open for exactly that install).
 
-On first run, an approval card asks for your Claude subscription token and shows
-how to mint it.
+No document names a connector, so connect the one that supplies the token in
+this project directory:
+
+```bash
+lns connector connect claude-code-subscription
+```
+
+That card shows how to mint the token. The token itself is bound per machine, so
+a second project needs the connect but not the token again. The first request
+the workload makes to `api.anthropic.com` then asks whether this workload may
+spend the value, and answering it arms the credential here.
 
 ## Publish and run from a registry
 

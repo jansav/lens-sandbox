@@ -161,7 +161,6 @@ async fn orchestrate(
     let mut signed_in = Vec::new();
     let mut revocations_at_gate = std::collections::HashMap::new();
     if let Some(plan) = &sandbox_plan {
-        crate::artifact::real::refuse_unknown_connectors(plan.workload.policy.as_ref())?;
         // Read before the gate opens: a device flow can hold it for minutes, and a disconnect landing inside that window must win over the grant the sign-in earns.
         revocations_at_gate = policy
             .as_deref()
@@ -603,7 +602,7 @@ async fn orchestrate(
     Ok(session_code)
 }
 
-/// Block the boot on any declared credential whose supplying connector signs in with oauth and holds no armed machine grant: drive that sign-in host-side (streaming the verification frames to the client), and abort the launch if it does not complete. Returns the ids whose sign-in the user completed this launch — that consent becomes the workload's grant, so the credential arms now and the next run skips the sign-in. A bare `spec.connectors` id never gates here — it is offered reactively on first use.
+/// Block the boot on any declared credential whose supplying connector signs in with oauth and holds no armed machine grant: drive that sign-in host-side (streaming the verification frames to the client), and abort the launch if it does not complete. Returns the ids whose sign-in the user completed this launch — that consent becomes the workload's grant, so the credential arms now and the next run skips the sign-in.
 async fn gate_declared_sign_ins(
     credentials: &[lns_spec::Credential],
     frame_tx: &Sender<WireFrame>,

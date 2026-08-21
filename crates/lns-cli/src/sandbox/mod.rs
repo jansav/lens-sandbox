@@ -973,7 +973,6 @@ fn render_cached_inspect<W: std::io::Write>(
                 writeln!(out, "ports: {}", declared_ports_line(&view.ports))?;
             }
             render_filesets(out, &view.filesets)?;
-            render_connectors(out, &view.connectors)?;
             for credential in &view.credentials {
                 writeln!(out, "credential: {}", credential_disclosure(credential))?;
             }
@@ -1071,13 +1070,6 @@ pub(crate) fn credential_disclosure(credential: &lns_spec::Credential) -> String
         .map(|injection| injection.domain.as_str())
         .collect();
     format!("{} -> {}", credential.env_var, domains.join(", "))
-}
-
-fn render_connectors<W: std::io::Write>(out: &mut W, connectors: &[String]) -> Result<()> {
-    for id in connectors {
-        writeln!(out, "connector: {id}")?;
-    }
-    Ok(())
 }
 
 fn render_policy_flags<W: std::io::Write>(out: &mut W, flags: &[String]) -> Result<()> {
@@ -1341,7 +1333,6 @@ mod tests {
                 mounts: Vec::new(),
                 ports: Vec::new(),
                 filesets: Vec::new(),
-                connectors: Vec::new(),
                 env: Vec::new(),
                 credentials: Vec::new(),
                 tools,
@@ -2128,7 +2119,6 @@ mod tests {
                     mounts: Vec::new(),
                     ports: Vec::new(),
                     filesets: Vec::new(),
-                    connectors: vec!["some-provider".into()],
                     env: Vec::new(),
                     credentials: Vec::new(),
                     tools: vec!["node@22.11.0".into()],
@@ -2148,7 +2138,6 @@ mod tests {
             text.contains("image: docker.io/library/alpine"),
             "got: {text}"
         );
-        assert!(text.contains("connector: some-provider"), "got: {text}");
         assert!(text.contains("tool: node@22.11.0"), "got: {text}");
     }
 

@@ -98,6 +98,14 @@ fn lns_yaml_with_unknown_nested_field(w: &mut BehaviourWorld) {
     );
 }
 
+#[given("an lns.yaml naming a connector")]
+fn lns_yaml_naming_a_connector(w: &mut BehaviourWorld) {
+    seed(
+        w,
+        "apiVersion: lns.run/v1\nkind: sandbox\nname: hermes\nspec:\n  image: ghcr.io/team/base:1\n  connectors:\n    - some-provider\n",
+    );
+}
+
 fn fileset_yaml(entries: &str) -> String {
     format!(
         "apiVersion: lns.run/v1\nkind: sandbox\nname: hermes\nspec:\n  image: ghcr.io/team/base:1\n  filesets:\n{entries}"

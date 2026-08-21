@@ -67,17 +67,12 @@ pub fn dispatch_run(
     Ok(path)
 }
 
-/// The baseline the guest's gate folds this directory's live decisions over. A source that ships neither egress nor connectors leaves no baseline at all, so the directory's decisions govern verbatim.
-fn baseline_policy(
-    egress: &lns_policy::Egress,
-    connectors: &[String],
-) -> Option<lns_policy::Policy> {
-    let ships_policy = *egress != lns_policy::Egress::default() || !connectors.is_empty();
-    ships_policy.then(|| lns_policy::Policy {
+/// The baseline the guest's gate folds this directory's live decisions over. A source shipping no egress leaves no baseline at all, so the directory's decisions govern verbatim.
+fn baseline_policy(egress: &lns_policy::Egress) -> Option<lns_policy::Policy> {
+    (*egress != lns_policy::Egress::default()).then(|| lns_policy::Policy {
         network: lns_policy::NetworkPolicy {
             egress: egress.clone(),
         },
-        connectors: connectors.to_vec(),
         ..lns_policy::Policy::default()
     })
 }
@@ -87,12 +82,7 @@ pub fn with_authored_baseline(
     mut resolved: ResolvedSandbox,
     authored: &lns_policy::Egress,
 ) -> ResolvedSandbox {
-    let connectors = resolved
-        .policy
-        .as_ref()
-        .map(|policy| policy.connectors.clone())
-        .unwrap_or_default();
-    resolved.policy = baseline_policy(authored, &connectors);
+    resolved.policy = baseline_policy(authored);
     resolved
 }
 
@@ -272,7 +262,7 @@ pub fn resolved_from_sandbox(
         command: def.spec.command.clone(),
         env: def.spec.env.clone(),
         resources: def.spec.resources.clone(),
-        policy: baseline_policy(&def.spec.egress, &def.spec.connectors),
+        policy: baseline_policy(&def.spec.egress),
         credentials: def.spec.credentials.clone(),
         tools: def.spec.tools.clone(),
     }
@@ -320,7 +310,7 @@ pub fn refuse_unresolved_local_mixins(def: &lns_artifact::sandbox::Definition) -
     )
 }
 
-/// Plan a local `lns.yaml` definition through the same path a published sandbox takes, so its policy, connectors, and resources apply identically. A published mixin it layers on still brings its filesets packed, so `packed` decides which entries read a directory on this machine.
+/// Plan a local `lns.yaml` definition through the same path a published sandbox takes, so its policy and resources apply identically. A published mixin it layers on still brings its filesets packed, so `packed` decides which entries read a directory on this machine.
 pub fn plan_local_sandbox(config_json: &[u8], packed: &PackedFilesets) -> Result<ResolvedSandbox> {
     let def = lns_artifact::sandbox::parse(config_json)
         .context("parsing the local sandbox definition")?;
@@ -556,7 +546,7 @@ mod tests {
     #[test]
     fn resolved_from_sandbox_carries_the_base_image_command_env_and_policy() {
         let def = lns_artifact::sandbox::parse(
-            br#"{"apiVersion":"lns.run/v1","kind":"sandbox","name":"hermes","spec":{"image":"ghcr.io/team/base@sha256:abc","command":"agent --serve","env":{"MODE":"research"},"egress":{"http":[{"match":"*","verdict":"deny"}]},"connectors":["some-provider"],"user":"root"}}"#,
+            br#"{"apiVersion":"lns.run/v1","kind":"sandbox","name":"hermes","spec":{"image":"ghcr.io/team/base@sha256:abc","command":"agent --serve","env":{"MODE":"research"},"egress":{"http":[{"match":"*","verdict":"deny"}]},"user":"root"}}"#,
         )
         .unwrap();
         let resolved = resolved_from_sandbox(&def, &PackedFilesets::new());
@@ -579,13 +569,12 @@ mod tests {
             policy.network.egress.http[0].match_pattern, "*",
             "the baseline's lockdown is a catch-all deny it carries in the table"
         );
-        assert_eq!(policy.connectors, vec!["some-provider".to_string()]);
     }
 
     #[test]
     fn a_plan_re_based_on_the_authored_egress_leaves_out_what_the_directory_decided() {
         let def = lns_artifact::sandbox::parse(
-            br#"{"apiVersion":"lns.run/v1","kind":"sandbox","name":"hermes","spec":{"image":"ghcr.io/team/base:1","connectors":["some-provider"],"egress":{"http":[{"match":"docs.some-vendor.example","verdict":"allow"},{"match":"api.some-vendor.example","verdict":"deny"}]}}}"#,
+            br#"{"apiVersion":"lns.run/v1","kind":"sandbox","name":"hermes","spec":{"image":"ghcr.io/team/base:1","egress":{"http":[{"match":"docs.some-vendor.example","verdict":"allow"},{"match":"api.some-vendor.example","verdict":"deny"}]}}}"#,
         )
         .unwrap();
         let authored = authored_egress(
@@ -610,11 +599,6 @@ mod tests {
                 .collect::<Vec<_>>(),
             ["api.some-vendor.example"],
             "the gate folds the live decisions file over this, and the developer's own allow frozen into it would outlive them deleting the rule"
-        );
-        assert_eq!(
-            policy.connectors,
-            vec!["some-provider".to_string()],
-            "no mixin can name a connector, so re-basing the egress must not drop the list the sandbox itself declared"
         );
     }
 
@@ -664,7 +648,7 @@ mod tests {
     }
 
     #[test]
-    fn a_definition_shipping_no_policy_or_connectors_plans_without_a_baseline() {
+    fn a_definition_shipping_no_egress_plans_without_a_baseline() {
         let def = lns_artifact::sandbox::parse(
             br#"{"apiVersion":"lns.run/v1","kind":"sandbox","name":"hermes","spec":{"image":"ghcr.io/team/base:1"}}"#,
         )
@@ -679,7 +663,7 @@ mod tests {
     #[test]
     fn plan_local_sandbox_resolves_the_definition_like_a_published_one() {
         let resolved = plan_local_sandbox_for_tests(
-            br#"{"apiVersion":"lns.run/v1","kind":"sandbox","name":"hermes","spec":{"image":"ghcr.io/team/base:1","connectors":["some-provider"],"resources":{"cpu":2,"memory":"1Gi"}}}"#,
+            br#"{"apiVersion":"lns.run/v1","kind":"sandbox","name":"hermes","spec":{"image":"ghcr.io/team/base:1","egress":{"http":[{"match":"api.example.test","verdict":"allow"}]},"resources":{"cpu":2,"memory":"1Gi"}}}"#,
         )
         .unwrap();
         assert_eq!(resolved.base_image, "ghcr.io/team/base:1");
@@ -688,7 +672,11 @@ mod tests {
             "resources must survive the plan"
         );
         let policy = resolved.policy.expect("the plan carries the inline policy");
-        assert_eq!(policy.connectors, vec!["some-provider".to_string()]);
+        assert_eq!(
+            policy.network.egress.http.len(),
+            1,
+            "the definition's own egress is what the gate folds the directory's decisions over"
+        );
     }
 
     #[test]

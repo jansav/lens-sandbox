@@ -181,13 +181,13 @@ interchangeable everywhere a run is addressed.
 | `stop`     | `lns stop`     | Stop a run gracefully: SIGTERM first, SIGKILL once the timeout passes (`-t`, default 10s). Reports whether it had to escalate. |
 | `logs`     | `lns logs`     | Print the run's captured stdout/stderr; `-f` keeps streaming until the run exits. The service keeps the most recent 2 MiB of output per run, while the run is listed. |
 | `attach`   | `lns attach`   | Re-join a run's live output, most useful after `lns run -d`. The detach chord (`ctrl-p,ctrl-q` by default) leaves the run running and returns you to your shell (docker-attach style; no signal is sent). Stdin reaches the workload only if the run was started with stdin open. |
-| `inspect`  | `lns inspect`  | With no target, a path-shaped one (`.`, `lns.yaml`, `./dir`, `./lns.dev.yaml`), or `-f`/`--file`: render that local definition's effective form, offline. For a running run: print its live state and launch configuration as JSON, with the policy file's parsed contents embedded when readable. For a cached reference: print the artifact's kind and definition — a `sandbox`'s image, workdir, mounts, declared ports, filesets (`fileset: <source> -> <guestPath>`), connectors, declared tools (`tool: node@22.11.0`), the mixins it resolved into (`mixin: <ref>`), and any over-broad-policy flag; a `mixin`'s own blocks as its author wrote them, unresolved; or a plain `image`. `--mixin <REF>` resolves that mixin into the sandbox first, so a composition can be previewed without starting a run. |
+| `inspect`  | `lns inspect`  | With no target, a path-shaped one (`.`, `lns.yaml`, `./dir`, `./lns.dev.yaml`), or `-f`/`--file`: render that local definition's effective form, offline. For a running run: print its live state and launch configuration as JSON, with the policy file's parsed contents embedded when readable. For a cached reference: print the artifact's kind and definition — a `sandbox`'s image, workdir, mounts, declared ports, filesets (`fileset: <source> -> <guestPath>`), declared tools (`tool: node@22.11.0`), the mixins it resolved into (`mixin: <ref>`), and any over-broad-policy flag; a `mixin`'s own blocks as its author wrote them, unresolved; or a plain `image`. `--mixin <REF>` resolves that mixin into the sandbox first, so a composition can be previewed without starting a run. |
 | `rm`       | `lns rm`       | Remove a cached sandbox and free its now-unreferenced layers; refuses a running one (a running id/name is rejected). |
 | `prune`    | —              | Remove every cached sandbox not held by a running one and, when none is live, reclaim the provisioned tool cache. Requires `-f`/`--force` — there is no interactive prompt. |
 
 The `./lns.yaml` definition (`apiVersion: lns.run/v1`, `kind: sandbox`) carries a
 `spec` with `image` (**required** base OCI image), and the optional `command`,
-`workdir`, `volumes`, `env`, `egress`, and `connectors`. Declarative mounts
+`workdir`, `volumes`, `env`, and `egress`. Declarative mounts
 accept `type: bind` or `type: volume`, `source`, an absolute `target`, and optional
 `readOnly`; explicit run mounts replace declarations with the same target. See
 [Running workloads — defining a sandbox](running-workloads.md#defining-a-sandbox).
@@ -355,12 +355,11 @@ refuse when one of them is a `deny`. See [Policy and approvals](policy.md).
 ## `lns connector`
 
 Manage the credential-connector catalog — the services whose credentials reach a
-workload. The catalog is machine-global (`~/.lns/connectors.yaml`). A connector
-declared in a sandbox definition's `spec.connectors` seeds its placeholder env
-var but is only offered — the workload is prompted on first use, never armed
-automatically. Connecting one records the connection for that project on this
-machine and binds its value; the workload
-still meets a first-use card, and answering it is what grants that workload the
+workload. The catalog is machine-global (`~/.lns/connectors.yaml`). No document
+names a connector, so one nobody connected seeds nothing and is only offered —
+the workload is prompted on first use, never armed automatically. Connecting one
+records the connection for that project and binds its value per machine; the
+workload still meets a first-use card, and answering it is what grants that workload the
 value.
 
 ```bash

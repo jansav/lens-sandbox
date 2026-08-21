@@ -1,8 +1,8 @@
 pub mod approval_flow;
 pub mod artifact_dispatch;
+pub mod connected_connectors;
 pub mod credential_at_boot;
 pub mod credential_flow;
-pub mod declared_connectors;
 pub mod declared_tools;
 pub mod env_injection;
 pub mod exec_session_routing;

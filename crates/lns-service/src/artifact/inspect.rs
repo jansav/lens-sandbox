@@ -75,7 +75,7 @@ fn declared_policy_flags(policy: &lns_policy::Policy) -> Vec<String> {
         .collect()
 }
 
-/// Project an already-peeked manifest into the pre-run inspection: a plain image reports its digest, a published sandbox reports its base image, mounts, filesets, declared connectors, and any over-broad-policy flags.
+/// Project an already-peeked manifest into the pre-run inspection: a plain image reports its digest, a published sandbox reports its base image, mounts, filesets, and any over-broad-policy flags.
 pub(crate) fn project_inspection(
     image_ref: &str,
     digest: String,
@@ -135,7 +135,6 @@ pub(crate) fn project_inspection(
                     ports: declared_view_ports(&def.spec.ports)?,
                     filesets: declared_view_filesets(&def.spec),
                     env: declared_view_env(&def.spec),
-                    connectors: def.spec.connectors.clone(),
                     credentials: def.spec.credentials.clone(),
                     tools: def.spec.tools.clone(),
                     policy_flags: resolved
@@ -295,7 +294,6 @@ mod tests {
             mounts,
             ports: Vec::new(),
             filesets: Vec::new(),
-            connectors: Vec::new(),
             env: Vec::new(),
             credentials: Vec::new(),
             tools: Vec::new(),
@@ -319,7 +317,6 @@ mod tests {
             mounts: Vec::new(),
             ports: Vec::new(),
             filesets: Vec::new(),
-            connectors: Vec::new(),
             env: Vec::new(),
             credentials: Vec::new(),
             tools: Vec::new(),
@@ -343,7 +340,6 @@ mod tests {
             mounts: Vec::new(),
             ports: Vec::new(),
             filesets,
-            connectors: Vec::new(),
             env: Vec::new(),
             credentials: Vec::new(),
             tools: Vec::new(),
@@ -667,7 +663,6 @@ mod tests {
                         owner: lns_ipc::SandboxFilesetOwner::Root,
                     },
                 ],
-                connectors: vec![],
                 env: vec![],
                 credentials: vec![],
                 tools: vec![],
@@ -701,7 +696,6 @@ mod tests {
                 mounts: vec![],
                 ports: vec![],
                 filesets: vec![],
-                connectors: vec![],
                 env: vec![],
                 credentials: vec![lns_spec::Credential {
                     env_var: "SOME_TOKEN".into(),
@@ -741,7 +735,6 @@ mod tests {
                 mounts: vec![],
                 ports: vec![],
                 filesets: vec![],
-                connectors: vec![],
                 env: vec![],
                 credentials: vec![],
                 tools: vec!["node@22.11.0".into(), "python@3.12.6".into()],
@@ -773,7 +766,6 @@ mod tests {
                 mounts: vec![],
                 ports: vec![],
                 filesets: vec![],
-                connectors: vec![],
                 env: vec!["FOO=bar".into(), "SHELL=/bin/sh".into()],
                 credentials: vec![],
                 tools: vec![],

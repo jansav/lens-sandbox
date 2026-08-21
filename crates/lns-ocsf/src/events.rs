@@ -417,14 +417,8 @@ pub fn bind_mount(
     ev.build()
 }
 
-pub fn sandbox_run(
-    ctx: &Context,
-    reference: &str,
-    digest: &str,
-    connectors: &[String],
-    policy_hash: &str,
-) -> Value {
-    let mut ev = Event::new(
+pub fn sandbox_run(ctx: &Context, reference: &str, digest: &str, policy_hash: &str) -> Value {
+    Event::new(
         "sandbox_run",
         class::PROCESS_ACTIVITY,
         category::SYSTEM,
@@ -439,11 +433,8 @@ pub fn sandbox_run(
     .note("lns_origin", "host".into())
     .note("lns_sandbox", reference.into())
     .note("lns_sandbox_digest", digest.into())
-    .note("lns_policy_hash", policy_hash.into());
-    if !connectors.is_empty() {
-        ev = ev.note("lns_connectors", json!(connectors));
-    }
-    ev.build()
+    .note("lns_policy_hash", policy_hash.into())
+    .build()
 }
 
 #[cfg(test)]
@@ -741,12 +732,11 @@ mod tests {
     }
 
     #[test]
-    fn sandbox_run_records_the_reference_resolved_digest_and_connectors() {
+    fn sandbox_run_records_the_reference_and_resolved_digest() {
         let ev = sandbox_run(
             &ctx(),
             "some-registry.example/some-agent:research",
             "sha256:beef",
-            &["some-connector".into()],
             "sha256:po1icy",
         );
         assert_schema_valid(&ev);
@@ -762,15 +752,6 @@ mod tests {
             "the audit must pin which bytes actually ran, not just the mutable tag"
         );
         assert_eq!(ev["unmapped"]["lns_policy_hash"], "sha256:po1icy");
-        assert_eq!(ev["unmapped"]["lns_connectors"][0], "some-connector");
-    }
-
-    #[test]
-    fn sandbox_run_omits_the_connectors_note_when_there_are_none() {
-        let ev = sandbox_run(&ctx(), "reg/some-agent:1", "sha256:beef", &[], "sha256:p");
-        assert_schema_valid(&ev);
-        assert!(ev["unmapped"].get("lns_connectors").is_none());
-        assert_eq!(ev["unmapped"]["lns_policy_hash"], "sha256:p");
     }
 
     #[test]

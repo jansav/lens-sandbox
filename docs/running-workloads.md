@@ -1,9 +1,9 @@
 # Running workloads
 
 Lens Sandbox has one user-facing noun: the **sandbox**. A sandbox is defined by a
-`./lns.yaml` file that pins a base OCI image plus its command, environment, policy,
-and connectors. One directory is one sandbox. A sandbox is either **cached**
-(pulled or built, sitting in the local cache) or **running**.
+`./lns.yaml` file that pins a base OCI image plus its command, environment, and
+policy. One directory is one sandbox. A sandbox is either **cached** (pulled or
+built, sitting in the local cache) or **running**.
 
 You drive it on two tiers:
 
@@ -38,7 +38,6 @@ spec:
     memory: 512Mi
   egress:
     http: []
-  connectors: []
   credentials: []
   volumes:
     - type: bind
@@ -63,7 +62,6 @@ The `spec` fields:
 | `user`         | The run-as user the sandbox needs, `USER[:GROUP]` like `-u`, so a definition that needs root is runnable as published. A per-run `-u` still wins, and the image's own `USER` is the fallback when this is unset. |
 | `env`          | Non-secret environment variables seeded into the workload.                   |
 | `egress`       | Where the workload may reach — the `http` and `tcp` rule tables (see [Policy](policy.md)). |
-| `connectors` | Ids of the [connectors](connectors.md) the sandbox would like to use. Declaring seeds the connector's placeholder env var but is not a grant: a declared id is offered on first use (accept its connect card to arm it), never armed automatically — so an untrusted published sandbox can't open a route or spend a bound credential behind your back. An id the machine's catalog doesn't know refuses the launch. |
 | `credentials`  | The secrets the workload needs, one entry each: the variable it reads (`envVar`), the fake value it holds (`placeholder`, which must contain `placeholder` or `lns` and be at least 16 characters), and the destinations the real value may travel to (`injections[]`, each a `kind` and a `domain`, which may name a host family but never the catch-all `*`). An `api_key_header` injection also names the `header` it sets. A declaration names no connector — this machine decides how the value is obtained. A connector whose own claim covers a declared domain supplies it: an `oauth`-kind one blocks the launch on its sign-in, a credential-kind one binds through the ordinary first-use value decision. With no catalog entry claiming the domain, the first request asks for a pasted value. Two entries may not share an `envVar`. See [Credentials](credentials.md#value-decisions). |
 | `resources`    | vCPUs, memory, and disk the sandbox boots with. `cpu` and `memory` take a unit suffix or `N%` of the host, and per-run `--cpus` / `--mem` flags win. `disk` sizes the writable disk the run throws away when it ends; it takes an absolute size only (`40Gi`, minimum `20Mi`), defaults to `10Gi`, and no flag overrides it. A named volume sizes itself with its own `size` — see [Declarative mounts](#declarative-mounts). |
 | `volumes`      | Named volumes and host binds mounted into the guest; a bind may `exclude` subpaths it must not expose, and a named volume may set its `size`. See [Declarative mounts](#declarative-mounts). |
@@ -603,7 +601,7 @@ spec:
 
 A mixin is a document of `kind: mixin`. It may carry anything a sandbox can
 except the blocks that describe one launch — `image`, `command`, `workdir`,
-`user`, `resources` — and it may not name a connector.
+`user`, `resources`.
 
 You publish one the same way you publish a sandbox, because it is the same kind
 of thing:
@@ -1102,8 +1100,8 @@ primarily a live view of its output.
 **running** run it prints one JSON document with the run's status, image, command,
 and launch configuration (cpus, memory, env, ports, volumes, run-as identity), plus
 the contents of its policy file when that file is readable on this machine. For a
-**cached** reference it prints the artifact's kind and definition — a plain `image`,
-or a `sandbox`'s image, workdir, mounts, declared ports, filesets, and connectors,
+**cached** reference it prints the artifact's kind and definition — a plain
+`image`, or a `sandbox`'s image, workdir, mounts, declared ports, and filesets,
 flagging a permissive default policy.
 
 ### Listing resource use

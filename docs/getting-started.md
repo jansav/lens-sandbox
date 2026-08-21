@@ -113,9 +113,9 @@ working directory comes from `spec.workdir` when declared, otherwise from the im
 
 ## Define a sandbox
 
-The sandbox you keep is its **definition** — a `./lns.yaml` file that pins the base
-image plus its command, environment, policy, and connectors. One directory is
-one sandbox. Scaffold it with `lns init`:
+The sandbox you keep is its **definition** — a `./lns.yaml` file that pins the
+base image plus its command, environment, and policy. One directory is one
+sandbox. Scaffold it with `lns init`:
 
 ```bash
 lns init
@@ -137,7 +137,6 @@ spec:
     memory: 512Mi
   egress:
     http: []
-  connectors: []
   credentials: []
   volumes:
     - type: bind

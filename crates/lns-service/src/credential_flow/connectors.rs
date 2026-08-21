@@ -17,7 +17,7 @@ pub struct AppliedConnectors {
     pub pkce_configs: HashMap<String, OauthAuth>,
 }
 
-/// Catalog connectors that aren't yet connected, with their routes held ready to allow live on connect, and device-flow / pkce configs for a sign-in dance on connect; a definition-declared entry seeds its placeholder env so the workload attempts its first request, while the rest stay detect-only.
+/// Catalog connectors that aren't yet connected, with their routes held ready to allow live on connect and device-flow / pkce configs for the sign-in dance; every one stays detect-only, because installing is not connecting.
 #[derive(Default)]
 pub struct ConnectableConnectors {
     pub providers: Vec<DefProvider>,
@@ -73,29 +73,6 @@ pub fn applied_connector_routes(ids: &[String], catalog: &[Connector]) -> Vec<Ro
         .filter(|integ| applied.contains(integ.id.as_str()))
         .flat_map(|integ| integ.routes.iter().map(|r| r.to_route_rule()))
         .collect()
-}
-
-/// Definition-declared ids the effective catalog cannot arm; each refuses the launch, unlike a stale `lns-local-mixin.yaml` id which stays a tolerant skip.
-pub fn unknown_connector_ids(declared: &[String], catalog: &[Connector]) -> Vec<String> {
-    let known: HashSet<&str> = catalog.iter().map(|i| i.id.as_str()).collect();
-    declared
-        .iter()
-        .filter(|id| !known.contains(id.as_str()))
-        .cloned()
-        .collect()
-}
-
-/// The launch-refusal message for definition-declared ids missing from the machine catalog, pointing at `lns connector add`.
-pub fn unknown_connectors_refusal(unknown: &[String]) -> String {
-    let ids = unknown
-        .iter()
-        .map(|id| format!("\"{id}\""))
-        .collect::<Vec<_>>()
-        .join(", ");
-    format!(
-        "the sandbox definition declares connector {ids} which this machine's catalog does not know; \
-         declare it with `lns connector add`, or remove it from spec.connectors"
-    )
 }
 
 /// Resolves the policy's applied connector ids against the effective catalog.
@@ -216,11 +193,10 @@ pub fn resolve_applied_with_credentials(
     out
 }
 
-/// A declaration's supplier is already reachable through the definition, so it is never offered as a fresh connect — and because the supplier joins the protected set, no second connector claiming the same domain is offered either.
+/// A declaration's supplier is already reachable through the definition, so it is never offered as a fresh connect — and because the supplier is treated as applied, no second connector claiming the same domain is offered either.
 pub fn resolve_connectable_with_credentials(
     policy: &Policy,
     credentials: &[Credential],
-    declared: &[String],
     catalog: &[Connector],
 ) -> ConnectableConnectors {
     let mut owned = policy.clone();
@@ -230,13 +206,13 @@ pub fn resolve_connectable_with_credentials(
             .filter_map(|(_, supplier)| supplier)
             .map(|integ| integ.id.clone()),
     );
-    resolve_connectable_with_declared(&owned, declared, catalog)
+    resolve_connectable_connectors(&owned, catalog)
 }
 
 /// A run's wire provider set and the consent boundary derived from it, composed in exactly one place so the Layer 2 rig and production cannot drift apart on who may arm a machine-stored value.
 pub struct RunProviders {
     pub providers: Vec<DefProvider>,
-    /// The value keys consented at boot — only the applied (overlay-connected + declared) providers; a connectable id, declared or not, joins live on connect.
+    /// The value keys consented at boot — only the overlay-connected providers; a connectable id joins live on connect.
     pub armed: HashSet<String>,
     pub connectable_ids: HashSet<String>,
 }
@@ -333,26 +309,12 @@ fn claimed_domains(integ: &Connector) -> impl Iterator<Item = &str> {
         )
 }
 
-/// The catalog connectors a run can offer to connect: every entry (credential or oauth) not already applied and not colliding with an applied connector's domain.
+/// The catalog connectors a run can offer to connect: every entry (credential or oauth) not already applied and not colliding with an applied connector's domain, so a colliding entry's machine-global stored value can never inject over the credential that owns that domain.
 pub fn resolve_connectable_connectors(
     policy: &Policy,
     catalog: &[Connector],
 ) -> ConnectableConnectors {
-    resolve_connectable_with_declared(policy, &[], catalog)
-}
-
-/// Connectables minus any colliding with a domain already spoken for — by an applied credential (`policy.connectors`) or by an artifact-declared, offered-not-armed connector (`declared`) — so a colliding entry's machine-global stored value can never inject over the credential that owns that domain (e.g. a leftover `anthropic` value clobbering a declared `claude-code-subscription` on api.anthropic.com, even when that domain is an injection target rather than a declared route).
-fn resolve_connectable_with_declared(
-    policy: &Policy,
-    declared: &[String],
-    catalog: &[Connector],
-) -> ConnectableConnectors {
     let owned: HashSet<&str> = policy.connectors.iter().map(String::as_str).collect();
-    let protected: HashSet<&str> = owned
-        .iter()
-        .copied()
-        .chain(declared.iter().map(String::as_str))
-        .collect();
 
     let mut out = ConnectableConnectors::default();
     for integ in catalog {
@@ -362,7 +324,7 @@ fn resolve_connectable_with_declared(
         let integ_domains: Vec<&str> = claimed_domains(integ).collect();
         let collides = catalog
             .iter()
-            .filter(|other| other.id != integ.id && protected.contains(other.id.as_str()))
+            .filter(|other| other.id != integ.id && owned.contains(other.id.as_str()))
             .flat_map(claimed_domains)
             .any(|guarded| {
                 integ_domains
@@ -374,8 +336,7 @@ fn resolve_connectable_with_declared(
             continue;
         }
         if let Some(p) = wire_provider(integ) {
-            let seeds = declared.iter().any(|id| id == &integ.id);
-            out.providers.push(if seeds { p } else { p.detect_only() });
+            out.providers.push(p.detect_only());
             out.routes.insert(
                 integ.id.clone(),
                 integ.routes.iter().map(|r| r.to_route_rule()).collect(),
@@ -710,33 +671,6 @@ mod tests {
     }
 
     #[test]
-    fn unknown_connector_ids_reports_only_ids_the_catalog_lacks_in_order() {
-        let catalog = vec![cred_connector(
-            "some-provider",
-            "SOME_TOKEN",
-            "api.example.test",
-        )];
-        let declared = vec![
-            "some-unknown".to_string(),
-            "some-provider".to_string(),
-            "other-unknown".to_string(),
-        ];
-        assert_eq!(
-            unknown_connector_ids(&declared, &catalog),
-            vec!["some-unknown".to_string(), "other-unknown".to_string()]
-        );
-        assert!(unknown_connector_ids(&["some-provider".to_string()], &catalog).is_empty());
-    }
-
-    #[test]
-    fn unknown_connectors_refusal_names_each_id_and_lns_connector_add() {
-        let msg = unknown_connectors_refusal(&["some-unknown".to_string(), "other".to_string()]);
-        assert!(msg.contains("\"some-unknown\""), "got: {msg}");
-        assert!(msg.contains("\"other\""), "got: {msg}");
-        assert!(msg.contains("`lns connector add`"), "got: {msg}");
-    }
-
-    #[test]
     fn skips_a_catalog_connector_that_is_not_applied() {
         let catalog = vec![cred_connector(
             "some-provider",
@@ -931,7 +865,7 @@ mod tests {
     }
 
     #[test]
-    fn an_undeclared_connectable_is_detect_only_so_it_seeds_no_phantom_placeholder() {
+    fn an_unconnected_connectable_is_detect_only_so_it_seeds_no_phantom_placeholder() {
         let catalog = vec![cred_connector(
             "some-provider",
             "SOME_TOKEN",
@@ -940,32 +874,7 @@ mod tests {
         let c = resolve_connectable_connectors(&policy_applying(&[]), &catalog);
         assert!(
             !c.providers[0].seeds_env(),
-            "an undeclared connectable must not pollute the workload env"
-        );
-    }
-
-    #[test]
-    fn a_declared_connectable_seeds_its_placeholder_env_while_staying_offerable() {
-        let catalog = vec![cred_connector(
-            "some-provider",
-            "SOME_TOKEN",
-            "api.example.test",
-        )];
-        let c = resolve_connectable_with_credentials(
-            &policy_applying(&[]),
-            &[],
-            &["some-provider".to_string()],
-            &catalog,
-        );
-        assert_eq!(c.providers.len(), 1, "a declared id stays offerable");
-        assert!(
-            c.providers[0].seeds_env(),
-            "a declared id seeds its placeholder so the workload attempts the request that triggers the connect offer"
-        );
-        assert_eq!(
-            c.routes.get("some-provider").map(|r| r.len()),
-            Some(1),
-            "its routes stay held for the connect, never pre-armed"
+            "an unconnected connectable must not pollute the workload env"
         );
     }
 
@@ -1448,7 +1357,6 @@ mod tests {
         let c = resolve_connectable_with_credentials(
             &policy_applying(&[]),
             &[declaration("SOME_TOKEN", "api.example.test")],
-            &[],
             &catalog,
         );
         assert!(
@@ -1466,7 +1374,6 @@ mod tests {
         let c = resolve_connectable_with_credentials(
             &policy_applying(&[]),
             &[declaration("SOME_TOKEN", "api.example.test")],
-            &[],
             &catalog,
         );
         let offered: Vec<&str> = c.providers.iter().map(|p| p.id()).collect();
